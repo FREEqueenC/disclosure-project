@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background-color: #050505;
+  color: #fff;
+}
+
+.font-gnostic {
+  font-family: 'Cinzel', serif;
+}
+
+.shadow-glow {
+  box-shadow: 0 0 10px #eab308, 0 0 20px #eab308;
+}
+
+canvas {
+  image-rendering: pixelated;
+}
