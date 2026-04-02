@@ -245,11 +245,15 @@ const AethericHub: React.FC = () => {
             ctx.lineWidth = 1;
             ctx.globalAlpha = 0.4;
 
+            const isMobile = w < 768; // Automatic low-fidelity mode for mobile
+            const shells = isMobile ? 3 : 5;
+            
             // Draw mathematical torus shells
-            for (let i = 0; i < 5; i++) { // Performance optimization: reduced shells
-                const r0 = radius + (i - 2) * 15;
+            for (let i = 0; i < shells; i++) { // Performance optimization: reduced shells
+                const r0 = radius + (i - Math.floor(shells/2)) * 15;
                 ctx.beginPath();
-                for (let angle = 0; angle < Math.PI * 2; angle += 0.4) { // Performance optimization: lower resolution
+                const angleStep = isMobile ? 0.6 : 0.4;
+                for (let angle = 0; angle < Math.PI * 2; angle += angleStep) { // Performance optimization: lower resolution
                     let x, y;
                     
                     if (clearance === 'OMEGA') {
@@ -275,8 +279,8 @@ const AethericHub: React.FC = () => {
             // Draw Surface Code Grid (QEC Stability Visualization)
             // Google Quantum AI ' Willow' Lattice Style
             // Performance optimization: increased grid size, reduced steps
-            const gridSize = 45;
-            const steps = 4;
+            const gridSize = isMobile ? 60 : 45;
+            const steps = isMobile ? 2 : 4;
             ctx.setLineDash([1, 3]);
             for(let x = -steps; x <= steps; x++) {
                 for(let y = -steps; y <= steps; y++) {
