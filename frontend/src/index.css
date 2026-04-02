@@ -3,8 +3,16 @@
 @tailwind utilities;
 
 :root {
-  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
   color-scheme: dark;
+  background-color: #050505;
+}
+
+h1, h2, h3 {
+  font-family: 'Cinzel', serif;
 }
 
 body {
@@ -17,10 +25,73 @@ body {
   font-family: 'Cinzel', serif;
 }
 
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 20s linear infinite;
+}
+
+@keyframes holographic-flicker {
+  0% { opacity: 0.88; }
+  5% { opacity: 0.2; }
+  10% { opacity: 0.9; }
+  15% { opacity: 0.1; }
+  20% { opacity: 0.8; }
+  25% { opacity: 0.1; }
+  30% { opacity: 1; }
+  100% { opacity: 0.9; }
+}
+
+.holographic-flicker {
+  animation: holographic-flicker 4s linear infinite;
+}
+
+.ritual-manifestation {
+  filter: drop-shadow(0 0 20px rgba(168, 85, 247, 0.3));
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 .shadow-glow {
   box-shadow: 0 0 10px #eab308, 0 0 20px #eab308;
 }
 
 canvas {
   image-rendering: pixelated;
+}
+
+/* CUSTOM GNOSTIC SCROLLBAR */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(16, 185, 129, 0.3) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.2);
+  border-radius: 10px;
+  border: 1px solid rgba(16, 185, 129, 0.1);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+}
+
+/* Ensure parents allow scrolling where needed */
+.scroll-container {
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: 100%;
 }
