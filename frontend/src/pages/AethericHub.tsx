@@ -1,8 +1,18 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Shield, Radio, Activity, Circle, Zap, ChevronRight, Lock, Sparkles, Wand2, Star, Target } from 'lucide-react';
+import { Shield, Radio, Activity, Circle, Zap, ChevronRight, Lock, Sparkles, Wand2, Star, Target, LayoutGrid } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import RitualLayer from '../components/RitualLayer';
 import ErrorBoundary from '../components/ErrorBoundary';
+import ShemhamforashRegistry, { Genius } from '../components/ShemhamforashRegistry';
+import { hashName, getCymaticModes } from '../components/CymaticSigil';
+
+interface ManifestedOrb extends Genius {
+    x: number;
+    y: number;
+    n: number;
+    m: number;
+    startTime: number;
+}
 
 // --- CONSTANTS ---
 const C = 299.792458; // Speed of light mm/ns
@@ -37,6 +47,8 @@ const AethericHub: React.FC = () => {
     const [user, setUser] = useState<string>("anonymous");
     const [aeonState, setAeonState] = useState<number>(1);
     const [isEstablishingResonance, setIsEstablishingResonance] = useState<boolean>(false);
+    const [isRegistryOpen, setIsRegistryOpen] = useState<boolean>(false);
+    const [manifestedOrbs, setManifestedOrbs] = useState<ManifestedOrb[]>([]);
     
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -102,6 +114,38 @@ const AethericHub: React.FC = () => {
                 setClearance('OMEGA');
             }
         }
+    };
+
+    const onDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        const data = e.dataTransfer.getData('application/json');
+        if (!data) return;
+
+        try {
+            const genius = JSON.parse(data) as Genius;
+            const rect = canvasRef.current?.getBoundingClientRect();
+            if (!rect) return;
+
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const hash = hashName(genius.name, genius.hebrew);
+            const { nMode, mMode } = getCymaticModes(hash);
+
+            setManifestedOrbs(prev => [...prev, {
+                ...genius,
+                x, y,
+                n: nMode,
+                m: mMode,
+                startTime: Date.now()
+            }]);
+        } catch (err) {
+            console.error("Failed to parse manifestation data");
+        }
+    };
+
+    const onDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
     };
 
     // --- FETCH STATUS & OMEGA VERIFICATION ---
@@ -229,7 +273,7 @@ const AethericHub: React.FC = () => {
         }
     }, [isPlaying, resonanceFreq, aeonState]);
 
-    // --- VISUALIZATION LOGIC ---
+        // --- VISUALIZATION LOGIC ---
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -239,6 +283,8 @@ const AethericHub: React.FC = () => {
         let animationFrameId: number;
         let rotation = 0;
         const particles: {x: number, y: number, life: number, color: string}[] = [];
+        
+        const isMobile = canvas.offsetWidth < 768; // Lifted for global use in useEffect
 
         // --- TOROIDAL RESONANCE CALCULATION (Quantum Cymatics v1.8) ---
         const getToroidalDensity = (rho: number, z: number, r0: number, sigma: number) => {
@@ -258,7 +304,6 @@ const AethericHub: React.FC = () => {
             ctx.lineWidth = 1;
             ctx.globalAlpha = 0.4;
 
-            const isMobile = w < 768; // Automatic low-fidelity mode for mobile
             const shells = isMobile ? 3 : 5;
             
             // Draw mathematical torus shells
@@ -319,6 +364,99 @@ const AethericHub: React.FC = () => {
                 }
             }
             ctx.setLineDash([]);
+        };
+
+        const drawCymaticOrb = (ctx: CanvasRenderingContext2D, orb: ManifestedOrb, time: number) => {
+            const { x, y, n, m, startTime } = orb;
+            const elapsed = (time - startTime) / 1000;
+            const intro = Math.min(1, elapsed * 2); // Fade in / grow
+            
+            const baseRadius = 40 * intro;
+            const segments = isMobile ? 12 : 24;
+            const rings = isMobile ? 8 : 16;
+            
+            ctx.save();
+            ctx.translate(x, y);
+            
+            // Pulse effect
+            const pulse = 1 + Math.sin(time * 0.002) * 0.05;
+            const rotationY = time * 0.0005;
+            const rotationX = time * 0.0003;
+
+            ctx.strokeStyle = 'rgba(168, 85, 247, 0.6)';
+            ctx.lineWidth = 0.5;
+
+            const project3D = (lat: number, lon: number) => {
+                // Lat/Lon to 3D
+                let r = baseRadius * pulse;
+                
+                // Displacement based on Chladni 2D pattern wrapped to sphere
+                // Normalize lat [0, PI] to [-1, 1] and lon [0, 2PI] to [-1, 1]
+                const px = (lon / Math.PI) - 1;
+                const py = (lat / (Math.PI / 2)) - 1;
+                
+                const cymaticVal = Math.cos(n * Math.PI * px) * Math.cos(m * Math.PI * py) - 
+                                   Math.cos(m * Math.PI * px) * Math.cos(n * Math.PI * py);
+                
+                r += cymaticVal * 5;
+
+                let tx = r * Math.sin(lat) * Math.cos(lon);
+                let ty = r * Math.cos(lat);
+                let tz = r * Math.sin(lat) * Math.sin(lon);
+
+                // Rotations
+                const x1 = tx;
+                const y1 = ty * Math.cos(rotationX) - tz * Math.sin(rotationX);
+                const z1 = ty * Math.sin(rotationX) + tz * Math.cos(rotationX);
+
+                const x2 = x1 * Math.cos(rotationY) + z1 * Math.sin(rotationY);
+                const y2 = y1;
+                const z2 = -x1 * Math.sin(rotationY) + z1 * Math.cos(rotationY);
+
+                const perspective = 300;
+                const scale = perspective / (perspective + z2);
+                return { x: x2 * scale, y: y2 * scale, alpha: Math.max(0.1, scale - 0.5) };
+            };
+
+            // Draw Parallels (Latitudinal rings)
+            for (let i = 0; i <= rings; i++) {
+                const lat = (i / rings) * Math.PI;
+                ctx.beginPath();
+                for (let j = 0; j <= segments; j++) {
+                    const lon = (j / segments) * Math.PI * 2;
+                    const p = project3D(lat, lon);
+                    if (j === 0) ctx.moveTo(p.x, p.y);
+                    else ctx.lineTo(p.x, p.y);
+                }
+                ctx.stroke();
+            }
+
+            // Draw Meridians (Longitudinal lines)
+            for (let j = 0; j < segments; j++) {
+                const lon = (j / segments) * Math.PI * 2;
+                ctx.beginPath();
+                for (let i = 0; i <= rings; i++) {
+                    const lat = (i / rings) * Math.PI;
+                    const p = project3D(lat, lon);
+                    if (i === 0) ctx.moveTo(p.x, p.y);
+                    else ctx.lineTo(p.x, p.y);
+                }
+                ctx.stroke();
+            }
+
+            // Central Core
+            ctx.beginPath();
+            ctx.arc(0, 0, 2 * intro, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+
+            // Label
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            ctx.font = '8px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(orb.name.toUpperCase(), 0, baseRadius + 15);
+
+            ctx.restore();
         };
 
         const render = () => {
@@ -428,6 +566,12 @@ const AethericHub: React.FC = () => {
                 ctx.globalAlpha = 1.0;
             });
 
+            // Render Manifested 3D Orbs
+            const now = Date.now();
+            manifestedOrbs.forEach(orb => {
+                drawCymaticOrb(ctx, orb, now);
+            });
+
             animationFrameId = requestAnimationFrame(render);
         };
 
@@ -447,6 +591,13 @@ const AethericHub: React.FC = () => {
                         </h1>
                         <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono">Operator ID: levity.base.eth</span>
                     </div>
+                    <button 
+                        onClick={() => setIsRegistryOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-900/20 border border-purple-500/30 rounded-full text-[10px] text-purple-300 uppercase tracking-widest hover:bg-purple-900/40 transition-all group"
+                    >
+                        <LayoutGrid className="w-3 h-3 group-hover:rotate-90 transition-transform" />
+                        Open Shemhamforash Registry
+                    </button>
                 </div>
 
                 <div className="flex items-center gap-10">
@@ -596,7 +747,13 @@ const AethericHub: React.FC = () => {
 
                     <RitualLayer clearance={clearance} balance={balance} resonance={parseFloat(resonanceFreq)} />
 
-                    <canvas ref={canvasRef} className="flex-grow w-full cursor-crosshair" />
+                    <div 
+                        className="flex-grow w-full relative"
+                        onDrop={onDrop}
+                        onDragOver={onDragOver}
+                    >
+                        <canvas ref={canvasRef} className="w-full h-full cursor-crosshair" />
+                    </div>
 
                     {isLunarSync && !isPhaseConjugated && (
                         <div className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-emerald-950/40 border border-emerald-500/30 px-8 py-3 rounded-full backdrop-blur-2xl flex items-center gap-4 animate-bounce">
@@ -635,6 +792,11 @@ const AethericHub: React.FC = () => {
                     </footer>
                 </section>
             </main>
+
+            <ShemhamforashRegistry 
+                isOpen={isRegistryOpen} 
+                onClose={() => setIsRegistryOpen(false)} 
+            />
         </div>
         </ErrorBoundary>
     );
