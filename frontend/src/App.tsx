@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Shield, Radio, Activity, Circle, Zap, ChevronRight, Lock } from 'lucide-react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 // --- CONSTANTS ---
 const C = 29.9792458; // Speed of light cm/ns
@@ -253,6 +254,7 @@ const App: React.FC = () => {
 
             {/* BACKGROUND TEXTURE */}
             <div className="fixed inset-0 pointer-events-none opacity-[0.03] grayscale bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+            <SpeedInsights />
         </div>
     );
 }
