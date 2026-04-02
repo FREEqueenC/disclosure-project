@@ -320,7 +320,7 @@ const AethericHub: React.FC = () => {
                 drawVortex(ctx, Date.now());
             }
 
-            rotation += 0.01 + (isPlaying ? 0.03 : 0);
+            rotation += 0.01 + (isPlaying ? 0.01 : 0); // Decelerated rotation for better stability perception
 
             const baseHue = isLunarSync ? 160 : (isPhaseConjugated ? 280 : 200);
             const primaryColor = `hsla(${baseHue}, 80%, 50%, 0.8)`;
@@ -464,29 +464,20 @@ const AethericHub: React.FC = () => {
             </nav>
 
             <main className="pt-24 p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 min-h-[calc(100vh-6rem)] lg:h-[calc(100vh-6rem)]">
-                {/* SIDEBAR: SIDEREAL CONSTANTS */}
-                <div className="absolute top-32 left-6 z-30 hidden xl:block pointer-events-none">
-                    <div className="bg-black/60 border border-white/5 backdrop-blur-md p-4 space-y-4 rounded-sm shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-                        <div className="space-y-1">
-                            <div className="text-[8px] text-zinc-500 uppercase tracking-tighter">Sync_Frequency</div>
-                            <div className="text-xs font-mono text-emerald-400">{SIDEREAL_CONSTANT} GHz</div>
+                {/* ASCENSION & SIDEREAL CONTROLS */}
+                <aside className="lg:col-span-1 space-y-6 flex flex-col h-full overflow-hidden">
+                    {/* SIDEREAL CONSTANTS (Moved from absolute overlay) */}
+                    <div className="bg-black/60 border border-zinc-800 p-4 space-y-4 rounded-sm">
+                        <div className="flex justify-between items-center text-[10px] uppercase font-mono tracking-tighter">
+                            <div className="text-zinc-500">Sync_Frequency</div>
+                            <div className="text-emerald-400">{SIDEREAL_CONSTANT} GHz</div>
                         </div>
-                        <div className="space-y-1">
-                            <div className="text-[8px] text-zinc-500 uppercase tracking-tighter">Vacuum_Stability</div>
-                            <div className="text-xs font-mono text-blue-400">0.99981 PF</div>
-                        </div>
-                        <div className="space-y-1">
-                            <div className="text-[8px] text-zinc-500 uppercase tracking-tighter">Cipher_Key</div>
-                            <div className="text-xs font-mono text-purple-400">{BRUCE_CIPHERS.VOICE_SYNC}</div>
-                        </div>
-                        <div className="space-y-1 pt-2 border-t border-white/5">
-                            <div className="text-[8px] text-zinc-600 uppercase tracking-tighter">Treasury_Sync</div>
-                            <div className="text-[10px] font-mono text-zinc-400">LOG_{BRUCE_CIPHERS.AEON_ALPHA}</div>
+                        <div className="flex justify-between items-center text-[10px] uppercase font-mono tracking-tighter border-t border-zinc-800/50 pt-2">
+                            <div className="text-zinc-500">Vacuum_Stability</div>
+                            <div className="text-blue-400">0.99981 PF</div>
                         </div>
                     </div>
-                </div>
-                {/* ASCENSION CONTROLS */}
-                <aside className="lg:col-span-1 space-y-6 flex flex-col h-full overflow-hidden">
+
                     <section className="bg-zinc-900/30 border border-zinc-800 p-6 rounded-2xl backdrop-blur-md flex-grow flex flex-col overflow-hidden max-h-full">
                         <h2 className="text-[10px] font-bold text-purple-400 mb-6 flex items-center gap-2 uppercase tracking-widest">
                             <Activity className="w-4 h-4" /> Aetheric Ascension 
