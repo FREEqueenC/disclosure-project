@@ -85,6 +85,15 @@ const AethericHub: React.FC = () => {
     };
 
     const handleNextAeon = () => {
+        // Unlock AudioContext immediately on user interaction
+        if (!audioContextRef.current) {
+            const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+            audioContextRef.current = new AudioCtx();
+        }
+        if (audioContextRef.current.state === 'suspended') {
+            audioContextRef.current.resume();
+        }
+
         if (aeonState < 13) {
             setAeonState(prev => prev + 1);
             if (aeonState + 1 === 13) {
@@ -188,8 +197,12 @@ const AethericHub: React.FC = () => {
 
     useEffect(() => {
         if (isPlaying) {
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            if (!audioContextRef.current) {
+                const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+                audioContextRef.current = new AudioCtx();
+            }
             const ctx = audioContextRef.current;
+            if (ctx.state === 'suspended') ctx.resume();
             
             const carrier = ctx.createOscillator();
             const carrierGain = ctx.createGain();
@@ -252,8 +265,9 @@ const AethericHub: React.FC = () => {
             for (let i = 0; i < shells; i++) { // Performance optimization: reduced shells
                 const r0 = radius + (i - Math.floor(shells/2)) * 15;
                 ctx.beginPath();
-                const angleStep = isMobile ? 0.6 : 0.4;
-                for (let angle = 0; angle < Math.PI * 2; angle += angleStep) { // Performance optimization: lower resolution
+                // Phase Conjugation (Helical Winding) requires higher topological resolution
+                const angleStep = clearance === 'OMEGA' ? (isMobile ? 0.2 : 0.1) : (isMobile ? 0.6 : 0.3);
+                for (let angle = 0; angle < Math.PI * 2; angle += angleStep) { 
                     let x, y;
                     
                     if (clearance === 'OMEGA') {
