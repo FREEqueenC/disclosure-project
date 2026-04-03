@@ -34,7 +34,7 @@ app.use(cors({
     'http://127.0.0.1:3000',
     'https://disclosure-project.org', 
     'https://www.disclosure-project.org',
-    /\.ngrok-free\.app$/
+    /\.ngrok-free\.(app|dev)$/
   ],
   methods: ['GET', 'POST', 'OPTIONS'],
   credentials: true

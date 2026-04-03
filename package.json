@@ -1,12 +1,24 @@
 {
   "name": "project-disclosure-the-intelligence-hub",
-  "workspaces": ["frontend", "backend"], 
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
     "dev-frontend": "npm run dev --prefix frontend",
     "dev-backend": "npm run dev --prefix backend",
     "dev": "concurrently \"npm run dev-frontend\" \"npm run dev-backend\""
   },
   "devDependencies": {
-    "concurrently": "latest"
+    "concurrently": "^9.2.1"
+  },
+  "dependencies": {
+    "@coinbase/onchainkit": "^1.1.2",
+    "@farcaster/miniapp-sdk": "^0.2.3",
+    "@reown/appkit": "^1.8.19",
+    "@tanstack/react-query": "^5.95.2",
+    "stripe": "^21.0.1",
+    "viem": "^2.47.6",
+    "wagmi": "^2.19.5"
   }
 }

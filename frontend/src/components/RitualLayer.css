@@ -1,0 +1,66 @@
+.ritual-manifestation {
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.2));
+    transition: filter 0.3s ease, transform 0.1s linear;
+    will-change: transform, filter;
+}
+
+.ritual-manifestation:hover {
+    filter: drop-shadow(0 0 30px rgba(255, 255, 255, 0.5)) brightness(1.3) contrast(1.1);
+}
+
+.holographic-seal {
+    position: relative;
+    overflow: hidden;
+    backdrop-blur: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.holographic-seal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(255, 255, 255, 0.03) 3px,
+        transparent 4px
+    );
+    pointer-events: none;
+    z-index: 1;
+}
+
+.holographic-seal::after {
+    content: '';
+    position: absolute;
+    top: -100%;
+    left: -100%;
+    width: 300%;
+    height: 300%;
+    background: linear-gradient(
+        45deg,
+        transparent,
+        rgba(255, 255, 255, 0.05) 45%,
+        rgba(255, 255, 255, 0.2) 50%,
+        rgba(255, 255, 255, 0.05) 55%,
+        transparent
+    );
+    transform: rotate(-45deg);
+    animation: holographic-shimmer 6s infinite linear;
+    pointer-events: none;
+    z-index: 2;
+}
+
+@keyframes holographic-shimmer {
+    0% { transform: translate(-30%, -30%) rotate(-45deg); }
+    100% { transform: translate(30%, 30%) rotate(-45deg); }
+}
+
+.seal-glitch {
+    animation: seal-pulse 3s infinite ease-in-out;
+}
+
+@keyframes seal-pulse {
+    0%, 100% { transform: scale(1) opacity(0.95); filter: hue-rotate(0deg); }
+    50% { transform: scale(1.02) opacity(1); filter: hue-rotate(10deg); }
+}
