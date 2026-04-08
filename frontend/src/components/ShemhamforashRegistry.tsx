@@ -29,6 +29,7 @@ const ShemhamforashRegistry: React.FC<ShemhamforashRegistryProps> = ({ isOpen, o
         // We set the drag data so the drop zone in AethericHub can pick it up
         e.dataTransfer.setData('application/json', JSON.stringify(genius));
         e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.dropEffect = 'copy';
     };
 
     return (
