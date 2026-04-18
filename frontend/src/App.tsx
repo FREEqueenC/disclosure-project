@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import LandingPage from './pages/LandingPage';
-import AethericHub from './pages/AethericHub';
+import DisclosureWorkspace from './pages/DisclosureWorkspace';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 
 const App: React.FC = () => {
@@ -22,8 +22,8 @@ const App: React.FC = () => {
   };
 
   // Route Rendering
-  if (currentPath === '#/hub') {
-    return <AethericHub />;
+  if (currentPath === '#/workspace') {
+    return <DisclosureWorkspace />;
   }
 
   if (currentPath.includes('privacy')) {
