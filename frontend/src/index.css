@@ -8,7 +8,12 @@
   font-weight: 400;
 
   color-scheme: dark;
-  background-color: #050505;
+  background-color: #030303;
+
+  /* Default theme values (emerald/purple harmonic) */
+  --theme-primary: #10b981;
+  --theme-secondary: #8b5cf6;
+  --theme-glow: rgba(16, 185, 129, 0.4);
 }
 
 h1, h2, h3 {
@@ -17,21 +22,23 @@ h1, h2, h3 {
 
 body {
   margin: 0;
-  background-color: #050505;
+  background-color: #030303;
   color: #fff;
+  overflow: hidden; /* Main app scrolls inside container */
 }
 
 .font-gnostic {
   font-family: 'Cinzel', serif;
 }
 
+/* CYBER-PULSE AND ANIMATION EFFECTS */
 @keyframes spin-slow {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 
 .animate-spin-slow {
-  animation: spin-slow 20s linear infinite;
+  animation: spin-slow 25s linear infinite;
 }
 
 @keyframes holographic-flicker {
@@ -46,26 +53,92 @@ body {
 }
 
 .holographic-flicker {
-  animation: holographic-flicker 4s linear infinite;
+  animation: holographic-flicker 6s linear infinite;
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.scanline-effect::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 50%,
+    rgba(255, 255, 255, 0.03) 50%
+  );
+  background-size: 100% 4px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.scanline-pulse {
+  animation: scanline 8s linear infinite;
 }
 
 .ritual-manifestation {
-  filter: drop-shadow(0 0 20px rgba(168, 85, 247, 0.3));
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.shadow-glow {
-  box-shadow: 0 0 10px #eab308, 0 0 20px #eab308;
+  filter: drop-shadow(0 0 20px var(--theme-glow));
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 canvas {
   image-rendering: pixelated;
 }
 
+/* DYNAMIC ACCENT CLASSES */
+.border-theme-primary {
+  border-color: var(--theme-primary);
+}
+
+.border-theme-secondary {
+  border-color: var(--theme-secondary);
+}
+
+.text-theme-primary {
+  color: var(--theme-primary);
+}
+
+.text-theme-secondary {
+  color: var(--theme-secondary);
+}
+
+.shadow-glow-theme {
+  box-shadow: 0 0 15px var(--theme-glow), inset 0 0 8px var(--theme-glow);
+}
+
+.shadow-glow-text {
+  text-shadow: 0 0 8px var(--theme-glow);
+}
+
+/* HORIZONTAL TICKER SYSTEM */
+@keyframes ticker {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
+}
+
+.ticker-wrap {
+  overflow: hidden;
+  width: 100%;
+  display: flex;
+}
+
+.ticker-content {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: ticker 45s linear infinite;
+}
+
+.ticker-content:hover {
+  animation-play-state: paused;
+}
+
 /* CUSTOM GNOSTIC SCROLLBAR */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(16, 185, 129, 0.3) transparent;
+  scrollbar-color: var(--theme-primary) transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -78,18 +151,15 @@ canvas {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(16, 185, 129, 0.2);
+  background: color-mix(in srgb, var(--theme-primary) 30%, transparent);
   border-radius: 10px;
-  border: 1px solid rgba(16, 185, 129, 0.1);
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 10%, transparent);
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(16, 185, 129, 0.5);
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+  background: var(--theme-primary);
 }
 
-/* Ensure parents allow scrolling where needed */
 .scroll-container {
   overflow-y: auto;
   overflow-x: hidden;

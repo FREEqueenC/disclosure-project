@@ -21,5 +21,5 @@ EXPOSE 8080
 ENV PORT=8080
 ENV NODE_ENV=production
 
-# Start the server using ts-node directly
-CMD ["npx", "ts-node", "--transpile-only", "index.ts"]
+# Start the server using ts-node directly, requiring the OTel instrumentation
+CMD ["npx", "ts-node", "--transpile-only", "-r", "./instrumentation.ts", "index.ts"]

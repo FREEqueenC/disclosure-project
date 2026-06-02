@@ -10,12 +10,20 @@ export interface Genius {
     attribute?: string;
 }
 
+export interface Genius {
+    id: number;
+    name: string;
+    hebrew: string;
+    attribute?: string;
+}
+
 interface ShemhamforashRegistryProps {
     isOpen: boolean;
     onClose: () => void;
+    onSelectGenius?: (genius: Genius) => void;
 }
 
-const ShemhamforashRegistry: React.FC<ShemhamforashRegistryProps> = ({ isOpen, onClose }) => {
+const ShemhamforashRegistry: React.FC<ShemhamforashRegistryProps> = ({ isOpen, onClose, onSelectGenius }) => {
     const [searchQuery, setSearchQuery] = useState('');
 
     if (!isOpen) return null;
@@ -68,7 +76,7 @@ const ShemhamforashRegistry: React.FC<ShemhamforashRegistryProps> = ({ isOpen, o
             {/* List */}
             <div className="flex-grow overflow-y-auto custom-scrollbar p-4 space-y-3">
                 <div className="text-[8px] font-mono text-emerald-500/60 uppercase tracking-widest text-center mb-4 pb-2 border-b border-emerald-900/30">
-                    // DRAG A SIGIL ONTO THE AETHERIC HUB TO INITIATE 3D MANIFESTATION //
+                    // DRAG OR CLICK A SIGIL TO INITIATE RESONANCE MANIFESTATION //
                 </div>
 
                 {filteredGeniuses.map((genius) => (
@@ -76,9 +84,11 @@ const ShemhamforashRegistry: React.FC<ShemhamforashRegistryProps> = ({ isOpen, o
                         key={genius.id}
                         draggable
                         onDragStart={(e) => handleDragStart(e, genius)}
+                        onClick={() => onSelectGenius?.(genius)}
                         className="bg-zinc-900/30 border border-zinc-800 p-3 flex items-center gap-4 hover:border-purple-500/50 hover:bg-purple-900/10 transition-all cursor-grab active:cursor-grabbing group rounded-md"
-                        title={`Drag ${genius.name} to the Hub`}
+                        title={`Click to attune or drag ${genius.name} to the Hub`}
                     >
+
                         <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-black rounded-full border border-zinc-800 group-hover:border-purple-500/30">
                             {/* Render a tiny 2D representation */}
                             <CymaticSigil name={genius.name} hebrew={genius.hebrew} size={40} color="rgba(168, 85, 247, 0.4)" />
