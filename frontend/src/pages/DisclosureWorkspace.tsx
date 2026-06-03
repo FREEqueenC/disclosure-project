@@ -70,7 +70,7 @@ const DisclosureWorkspace: React.FC = () => {
   // --- 1. KEY RETRIEVAL & INITIAL DB LOAD ---
   useEffect(() => {
     // Check API Key
-    const key = localStorage.getItem('aetheris_api_key') || import.meta.env.VITE_GEMINI_API_KEY;
+    const key = localStorage.getItem('aetheris_api_key');
     if (key) {
       setHasApiKey(true);
       setApiKeyInput(key);
@@ -328,7 +328,7 @@ const DisclosureWorkspace: React.FC = () => {
   const handleSendChat = async () => {
     if (!chatInput.trim()) return;
 
-    const apiKey = localStorage.getItem('aetheris_api_key') || import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = localStorage.getItem('aetheris_api_key');
     if (!apiKey) {
       setShowSettings(true);
       setMessages(prev => [...prev, {
