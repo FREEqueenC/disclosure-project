@@ -52,7 +52,7 @@ const DisclosureWorkspace: React.FC = () => {
 
   // Chat State
   const [chatInput, setChatInput] = useState('');
-  const [searchScope, setSearchScope] = useState<'active' | 'global'>('active');
+  const [searchScope, setSearchScope] = useState<'slide' | 'deck_rag' | 'deck_full' | 'global_rag'>('deck_full');
   const [messages, setMessages] = useState<{
     role: 'user' | 'ai';
     content: string;
@@ -161,6 +161,32 @@ const DisclosureWorkspace: React.FC = () => {
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
+
+  // Touch gestures for mobile swipe drawer
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const diffX = e.changedTouches[0].clientX - touchStartX.current;
+    const diffY = e.changedTouches[0].clientY - touchStartY.current;
+
+    // Detect horizontal swipe
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+      if (diffX > 85 && isSidebarCollapsed) {
+        setIsSidebarCollapsed(false); // Swipe right -> Open Sidebar
+      } else if (diffX < -85 && !isSidebarCollapsed) {
+        setIsSidebarCollapsed(true); // Swipe left -> Close Sidebar
+      }
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
 
   // --- 2. THEME COLOR CONTROLLER ---
   useEffect(() => {
@@ -341,11 +367,33 @@ const DisclosureWorkspace: React.FC = () => {
   const findLocalContext = (query: string): { contextText: string; citations: { docName: string; pageNumber: number }[] } => {
     if (decks.length === 0) return { contextText: '', citations: [] };
 
+    // Case 1: Active Slide Only
+    if (searchScope === 'slide') {
+      if (!activePage || !activeDeck) return { contextText: '', citations: [] };
+      return {
+        contextText: `Document: [${activeDeck.name}], Slide: [Page ${activePage.pageNumber}]\nContent:\n${activePage.text}\n===`,
+        citations: [{ docName: activeDeck.name, pageNumber: activePage.pageNumber }]
+      };
+    }
+
+    // Case 2: Full Active Deck
+    if (searchScope === 'deck_full') {
+      if (!activeDeck) return { contextText: '', citations: [] };
+      const contextText = activeDeck.pages.map(page => 
+        `Document: [${activeDeck.name}], Slide: [Page ${page.pageNumber}]\nContent:\n${page.text}\n===`
+      ).join('\n\n');
+      const citations = activeDeck.pages.map(page => ({
+        docName: activeDeck.name,
+        pageNumber: page.pageNumber
+      }));
+      return { contextText, citations };
+    }
+
+    // Case 3 & 4: Keyword Search RAG (within attuned deck or global)
     const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
     if (queryWords.length === 0) return { contextText: '', citations: [] };
 
-    // Search target decks
-    const targetDecks = searchScope === 'active' && activeDeck ? [activeDeck] : decks;
+    const targetDecks = searchScope === 'deck_rag' && activeDeck ? [activeDeck] : decks;
     const pageScores: { page: SlidePage; deckName: string; score: number }[] = [];
 
     targetDecks.forEach(deck => {
@@ -356,7 +404,6 @@ const DisclosureWorkspace: React.FC = () => {
         queryWords.forEach(word => {
           if (pageTextLower.includes(word)) {
             score++;
-            // Additional weight if keyword matches entity tag
             if (deck.entities.some(e => e.toLowerCase().includes(word))) {
               score += 2;
             }
@@ -369,7 +416,6 @@ const DisclosureWorkspace: React.FC = () => {
       });
     });
 
-    // Sort by relevance score
     pageScores.sort((a, b) => b.score - a.score);
     const topPages = pageScores.slice(0, 3);
 
@@ -385,18 +431,26 @@ const DisclosureWorkspace: React.FC = () => {
     return { contextText, citations };
   };
 
-  const triggerQuickAction = (actionType: 'explain' | 'entities' | 'anomalies') => {
-    if (!activePage) return;
+  const triggerQuickAction = (actionType: 'explain' | 'entities' | 'anomalies' | 'deck_audit') => {
+    if (!activePage && actionType !== 'deck_audit') return;
+    if (!activeDeck && actionType === 'deck_audit') return;
     
     let queryText = '';
     if (actionType === 'explain') {
       queryText = `Perform a comprehensive gnostic audit of this slide (Page ${activePageIndex + 1}). Explain its core thesis, physics principles, and historical context.`;
+      setSearchScope('slide');
     } else if (actionType === 'entities') {
       queryText = `Analyze the technical acronyms and gnostic entities on Page ${activePageIndex + 1}. Detail their relevance to black budget programs or vacuum physics.`;
+      setSearchScope('slide');
     } else if (actionType === 'anomalies') {
       queryText = `Audit Page ${activePageIndex + 1} for narrative contradictions, potential misinformation, or significant details hidden behind redactions.`;
+      setSearchScope('slide');
+    } else if (actionType === 'deck_audit') {
+      queryText = `Perform a comprehensive audit of the entire active slide deck "${activeDeck?.name}". Summarize its overarching thesis, key arguments, and list any exotic technologies, operations, or entities discussed.`;
+      setSearchScope('deck_full');
     }
 
+    setIsChatCollapsed(false); // Force expand chat console so user sees the progress!
     handleSendChat(queryText);
   };
 
@@ -655,7 +709,11 @@ User Transmission: "${userText}"
       ];
 
   return (
-    <div className="h-full bg-[#030303] text-zinc-300 font-sans flex flex-col relative select-none overflow-hidden scanline-effect">
+    <div 
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      className="h-full bg-[#030303] text-zinc-300 font-sans flex flex-col relative select-none overflow-hidden scanline-effect"
+    >
       
       {/* Background Particle Engine (Ritual Layer) */}
       <RitualLayer 
@@ -739,15 +797,32 @@ User Transmission: "${userText}"
       {/* Main Terminal Workspace */}
       <div className="flex flex-1 overflow-hidden z-30 relative">
         
+        {/* Mobile Sidebar Scrim Overlay */}
+        {!isSidebarCollapsed && (
+          <div 
+            className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity" 
+            onClick={() => setIsSidebarCollapsed(true)} 
+          />
+        )}
+        
         {/* Left Side: Deck Repository & Upload */}
         <aside className={`border-r border-zinc-900 bg-black/95 lg:bg-black/30 backdrop-blur-lg flex flex-col shrink-0 transition-all duration-300 ${isSidebarCollapsed ? 'w-0 -translate-x-full lg:w-0' : 'w-72 translate-x-0'} fixed lg:relative inset-y-0 left-0 z-50 h-[calc(100%-4rem)] mt-16 lg:h-auto lg:mt-0 overflow-hidden`}>
           <div className="p-4 border-b border-zinc-900 flex justify-between items-center bg-black/20">
             <h2 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
               <Database className="w-3.5 h-3.5 text-theme-primary" /> Slide Repository
             </h2>
-            <span className="text-[9px] font-mono bg-zinc-900 text-zinc-400 px-2 py-0.5 rounded">
-              DECKS: {decks.length}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-mono bg-zinc-900 text-zinc-400 px-2 py-0.5 rounded">
+                DECKS: {decks.length}
+              </span>
+              <button 
+                onClick={() => setIsSidebarCollapsed(true)}
+                className="lg:hidden p-1 text-zinc-500 hover:text-white rounded transition-colors"
+                title="Close Repository"
+              >
+                <ChevronLeft className="w-4 h-4 text-theme-primary" />
+              </button>
+            </div>
           </div>
 
           {/* Drag & Drop PDF Scanner Area */}
@@ -999,27 +1074,34 @@ User Transmission: "${userText}"
                       </div>
 
                       {/* Quick Audit Actions */}
-                      <div className="flex gap-2 mb-3 pb-3 border-b border-zinc-900/50 shrink-0">
+                      <div className="grid grid-cols-2 gap-2 mb-3 pb-3 border-b border-zinc-900/50 shrink-0">
                         <button
                           onClick={() => triggerQuickAction('explain')}
-                          className="flex-1 py-1.5 bg-zinc-950 hover:bg-zinc-900 hover:border-theme-primary/30 text-[8px] font-mono text-zinc-400 hover:text-white border border-zinc-900 rounded-sm tracking-wider uppercase transition-all"
+                          className="py-1.5 bg-zinc-950 hover:bg-zinc-900 hover:border-theme-primary/30 text-[8px] font-mono text-zinc-400 hover:text-white border border-zinc-900 rounded-sm tracking-wider uppercase transition-all flex items-center justify-center gap-1"
                           title="Ask Auditor to explain active slide"
                         >
-                          🔍 Explain
+                          <span>🔍</span> <span className="truncate">Explain Slide</span>
                         </button>
                         <button
                           onClick={() => triggerQuickAction('entities')}
-                          className="flex-1 py-1.5 bg-zinc-950 hover:bg-zinc-900 hover:border-theme-primary/30 text-[8px] font-mono text-zinc-400 hover:text-white border border-zinc-900 rounded-sm tracking-wider uppercase transition-all"
+                          className="py-1.5 bg-zinc-950 hover:bg-zinc-900 hover:border-theme-primary/30 text-[8px] font-mono text-zinc-400 hover:text-white border border-zinc-900 rounded-sm tracking-wider uppercase transition-all flex items-center justify-center gap-1"
                           title="Request breakdown of detected entities"
                         >
-                          🧬 Entities
+                          <span>🧬</span> <span className="truncate">Slide Entities</span>
                         </button>
                         <button
                           onClick={() => triggerQuickAction('anomalies')}
-                          className="flex-1 py-1.5 bg-zinc-950 hover:bg-zinc-900 hover:border-theme-primary/30 text-[8px] font-mono text-zinc-400 hover:text-white border border-zinc-900 rounded-sm tracking-wider uppercase transition-all"
+                          className="py-1.5 bg-zinc-950 hover:bg-zinc-900 hover:border-theme-primary/30 text-[8px] font-mono text-zinc-400 hover:text-white border border-zinc-900 rounded-sm tracking-wider uppercase transition-all flex items-center justify-center gap-1"
                           title="Scan slide for contradictions or redactions"
                         >
-                          ⚠️ Anomalies
+                          <span>⚠️</span> <span className="truncate">Slide Anomalies</span>
+                        </button>
+                        <button
+                          onClick={() => triggerQuickAction('deck_audit')}
+                          className="py-1.5 bg-zinc-950 hover:bg-zinc-900 hover:border-theme-primary/30 text-[8px] font-mono text-zinc-400 hover:text-white border border-zinc-900 rounded-sm tracking-wider uppercase transition-all flex items-center justify-center gap-1"
+                          title="Perform a full audit of all slides in this deck"
+                        >
+                          <span>📚</span> <span className="truncate">Audit Deck</span>
                         </button>
                       </div>
 
@@ -1147,11 +1229,27 @@ User Transmission: "${userText}"
                 <div className="flex items-center gap-2 sm:gap-4 bg-zinc-950 border border-zinc-900 rounded-lg p-1.5 sm:p-2 focus-within:border-theme-primary/50 transition-colors shadow-inner">
                   {/* Search Scope Switcher */}
                   <button
-                    onClick={() => setSearchScope(prev => prev === 'active' ? 'global' : 'active')}
-                    className={`px-2 py-1.5 sm:px-3 sm:py-2 text-[9px] font-mono rounded border uppercase transition-colors shrink-0 ${searchScope === 'active' ? 'border-theme-primary/30 text-theme-primary bg-theme-primary/5' : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'}`}
-                    title="Search scope: currently attuned deck vs all decks"
+                    onClick={() => {
+                      setSearchScope(prev => {
+                        if (prev === 'slide') return 'deck_rag';
+                        if (prev === 'deck_rag') return 'deck_full';
+                        if (prev === 'deck_full') return 'global_rag';
+                        return 'slide';
+                      });
+                    }}
+                    className={`px-2 py-1.5 sm:px-3 sm:py-2 text-[9px] font-mono rounded border uppercase transition-colors shrink-0 ${
+                      searchScope === 'slide' ? 'border-emerald-500/30 text-emerald-400 bg-emerald-950/10' :
+                      searchScope === 'deck_rag' ? 'border-sky-500/30 text-sky-400 bg-sky-950/10' :
+                      searchScope === 'deck_full' ? 'border-purple-500/30 text-purple-400 bg-purple-950/10' :
+                      'border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                    }`}
+                    title="Toggle search scope: Slide, Deck (RAG), Full Deck, or Global (RAG)"
                   >
-                    <span className="hidden sm:inline">SCOPE: </span>{searchScope === 'active' ? 'ATTUNED' : 'GLOBAL'}
+                    <span className="hidden sm:inline">SCOPE: </span>
+                    {searchScope === 'slide' && 'SLIDE'}
+                    {searchScope === 'deck_rag' && 'DECK (RAG)'}
+                    {searchScope === 'deck_full' && 'FULL DECK'}
+                    {searchScope === 'global_rag' && 'GLOBAL (RAG)'}
                   </button>
 
                   <input 
@@ -1160,7 +1258,7 @@ User Transmission: "${userText}"
                     onChange={e => setChatInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSendChat()}
                     placeholder="Query Gnostic Auditor..."
-                    className="flex-1 bg-transparent border-none outline-none text-zinc-200 placeholder:text-zinc-700 text-xs px-1 sm:px-2"
+                    className="flex-1 bg-transparent border-none outline-none text-zinc-200 placeholder:text-zinc-700 text-base sm:text-xs px-1 sm:px-2"
                   />
 
                   <button 
@@ -1203,7 +1301,7 @@ User Transmission: "${userText}"
                 value={apiKeyInput}
                 onChange={e => setApiKeyInput(e.target.value)}
                 placeholder="AIzaSy..." 
-                className="w-full bg-zinc-900 border border-zinc-800 text-xs font-mono text-theme-primary placeholder-zinc-700 rounded p-2.5 outline-none focus:border-theme-primary/50 transition-colors"
+                className="w-full bg-zinc-900 border border-zinc-800 text-base sm:text-xs font-mono text-theme-primary placeholder-zinc-700 rounded p-2.5 outline-none focus:border-theme-primary/50 transition-colors"
               />
             </div>
 
