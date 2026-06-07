@@ -39,38 +39,30 @@ export const Login: React.FC = () => {
 
   if (user) {
     return (
-      <div className="flex items-center gap-4 p-4 bg-gray-100 rounded-lg shadow-sm w-fit mb-4">
+      <div className="flex items-center gap-2 border border-zinc-900/60 bg-zinc-950/30 px-2 py-1 rounded-sm">
         {user.photoURL && (
-          <img src={user.photoURL} alt="Profile" className="w-10 h-10 rounded-full" />
+          <img src={user.photoURL} alt="Profile" className="w-5 h-5 rounded-full border border-zinc-800" />
         )}
-        <div>
-          <p className="font-semibold text-gray-800">{user.displayName || user.email}</p>
-          <div className="flex gap-2 mt-1">
-            <button 
-              onClick={handleSignOut}
-              className="text-xs px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition"
-            >
-              Sign Out
-            </button>
-            <button 
-              onClick={logToken}
-              className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
-            >
-              Log Token
-            </button>
-          </div>
-        </div>
+        <span className="text-[10px] font-mono text-zinc-400 truncate max-w-[100px] uppercase">
+          {user.displayName || user.email?.split('@')[0]}
+        </span>
+        <button 
+          onClick={handleSignOut}
+          className="text-[9px] font-mono bg-red-950/20 hover:bg-red-950/40 text-red-400 border border-red-900/40 px-2 py-0.5 rounded-sm transition uppercase"
+        >
+          Sign Out
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="mb-4">
+    <div className="flex items-center gap-2">
       <button
         onClick={handleSignIn}
-        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition font-medium text-gray-700"
+        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 hover:border-theme-primary/30 text-[10px] font-mono text-zinc-400 hover:text-white rounded-sm tracking-widest uppercase transition-all shadow-sm"
       >
-        <svg className="w-5 h-5" viewBox="0 0 24 24">
+        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
           <path
             fill="#4285F4"
             d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -88,9 +80,9 @@ export const Login: React.FC = () => {
             d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
           />
         </svg>
-        Sign in with Google
+        Sign In
       </button>
-      {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+      {error && <span className="text-red-500 text-[9px] font-mono uppercase">{error}</span>}
     </div>
   );
 };

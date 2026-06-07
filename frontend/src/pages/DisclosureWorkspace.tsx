@@ -592,8 +592,8 @@ User Transmission: "${userText}"
           style={{ 
             backgroundImage: `url(${activePage.image})`, 
             opacity: hologramOpacity,
-            mixBlendMode: 'overlay',
-            filter: 'brightness(0.5) contrast(1.3) grayscale(0.5)'
+            mixBlendMode: 'screen',
+            filter: 'brightness(0.65) contrast(1.15) grayscale(0.2)'
           }}
         />
       )}
@@ -844,7 +844,7 @@ User Transmission: "${userText}"
                 </div>
 
                 {/* Primary Projection Hub (Active Slide display) */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                   
                   {/* Left Column: Visual Projection */}
                   <div className="lg:col-span-2 space-y-4">
@@ -896,8 +896,8 @@ User Transmission: "${userText}"
                   </div>
 
                   {/* Right Column: Slide extracted text */}
-                  <div className="flex flex-col justify-between h-full space-y-4">
-                    <div className="border border-zinc-900 bg-black/50 rounded-lg p-5 backdrop-blur-md flex-1 flex flex-col shadow-inner min-h-[300px]">
+                  <div className="space-y-4">
+                    <div className="border border-zinc-900 bg-black/50 rounded-lg p-5 backdrop-blur-md h-[440px] flex flex-col shadow-inner">
                       <div className="flex justify-between items-center border-b border-zinc-900 pb-3 mb-3">
                         <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
                           <Eye className="w-3.5 h-3.5 text-theme-primary" /> Slide Transcription
