@@ -436,7 +436,7 @@ User Transmission: "${userText}"
 
       // 6. Perform direct fetch call to Google Generative Language endpoint
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: {
@@ -491,7 +491,7 @@ User Transmission: "${userText}"
 
         // Send the function response back to Gemini to get a natural language confirmation!
         const nextResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
           {
             method: 'POST',
             headers: {
