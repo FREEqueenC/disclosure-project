@@ -20,11 +20,18 @@ h1, h2, h3 {
   font-family: 'Cinzel', serif;
 }
 
-body {
+html,
+body,
+#root {
+  height: 100%;
   margin: 0;
+  padding: 0;
+  overflow: hidden;
   background-color: #030303;
+}
+
+body {
   color: #fff;
-  overflow: hidden; /* Main app scrolls inside container */
 }
 
 .font-gnostic {

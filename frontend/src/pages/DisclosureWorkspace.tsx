@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageSquare, FileText, ShieldAlert, Database, Upload, Send, Radio, 
-  ChevronRight, Key, Settings, Play, Pause, ChevronLeft, Trash2, Cpu, Eye, Info 
+  ChevronRight, Key, Settings, Play, Pause, ChevronLeft, Trash2, Cpu, Eye, Info,
+  Menu, ChevronUp, ChevronDown
 } from 'lucide-react';
 import { Login } from '../components/Login';
 import { initDB, getAllDecks, saveDeck, deleteDeck, SlideDeck, SlidePage } from '../utils/db';
@@ -35,6 +36,10 @@ const DisclosureWorkspace: React.FC = () => {
   
   // Registry Drawer State
   const [isRegistryOpen, setIsRegistryOpen] = useState(false);
+
+  // Collapsible panels state
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(window.innerWidth < 1024);
+  const [isChatCollapsed, setIsChatCollapsed] = useState<boolean>(false);
   
   // Upload State
   const [isDragging, setIsDragging] = useState(false);
@@ -108,6 +113,54 @@ const DisclosureWorkspace: React.FC = () => {
       workspaceViewportRef.current?.focus();
     }
   }, [activeDeckId]);
+
+  // Global keyboard navigation listener to prevent viewport scrolling from getting stuck
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl) {
+        const tagName = activeEl.tagName.toLowerCase();
+        if (tagName === 'input' || tagName === 'textarea' || activeEl.hasAttribute('contenteditable')) {
+          return;
+        }
+        const viewport = workspaceViewportRef.current;
+        if (!viewport) return;
+        // If focus is inside a panel that is explicitly scrollable, let it scroll naturally
+        if (activeEl !== document.body && activeEl !== viewport && activeEl.classList.contains('overflow-y-auto')) {
+          return;
+        }
+      }
+
+      const viewport = workspaceViewportRef.current;
+      if (!viewport) return;
+
+      const scrollAmount = 40;
+      const pageScrollAmount = viewport.clientHeight * 0.8;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        viewport.scrollBy({ top: scrollAmount, behavior: 'auto' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        viewport.scrollBy({ top: -scrollAmount, behavior: 'auto' });
+      } else if (e.key === 'PageDown' || (e.key === ' ' && !e.shiftKey)) {
+        e.preventDefault();
+        viewport.scrollBy({ top: pageScrollAmount, behavior: 'smooth' });
+      } else if (e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)) {
+        e.preventDefault();
+        viewport.scrollBy({ top: -pageScrollAmount, behavior: 'smooth' });
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        viewport.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
   // --- 2. THEME COLOR CONTROLLER ---
   useEffect(() => {
@@ -332,9 +385,25 @@ const DisclosureWorkspace: React.FC = () => {
     return { contextText, citations };
   };
 
+  const triggerQuickAction = (actionType: 'explain' | 'entities' | 'anomalies') => {
+    if (!activePage) return;
+    
+    let queryText = '';
+    if (actionType === 'explain') {
+      queryText = `Perform a comprehensive gnostic audit of this slide (Page ${activePageIndex + 1}). Explain its core thesis, physics principles, and historical context.`;
+    } else if (actionType === 'entities') {
+      queryText = `Analyze the technical acronyms and gnostic entities on Page ${activePageIndex + 1}. Detail their relevance to black budget programs or vacuum physics.`;
+    } else if (actionType === 'anomalies') {
+      queryText = `Audit Page ${activePageIndex + 1} for narrative contradictions, potential misinformation, or significant details hidden behind redactions.`;
+    }
+
+    handleSendChat(queryText);
+  };
+
   // --- 7. CHATBOT SUBMIT (Browser-to-Gemini Fetch) ---
-  const handleSendChat = async () => {
-    if (!chatInput.trim()) return;
+  const handleSendChat = async (overrideInput?: string) => {
+    const textToSubmit = overrideInput || chatInput;
+    if (!textToSubmit.trim()) return;
 
     const apiKey = localStorage.getItem('aetheris_api_key');
     if (!apiKey) {
@@ -347,13 +416,15 @@ const DisclosureWorkspace: React.FC = () => {
       return;
     }
 
-    const userText = chatInput;
+    const userText = textToSubmit;
     setMessages(prev => [...prev, { 
       role: 'user', 
       content: userText,
       timestamp: new Date().toLocaleTimeString()
     }]);
-    setChatInput('');
+    if (!overrideInput) {
+      setChatInput('');
+    }
     setIsChatLoading(true);
 
     try {
@@ -584,7 +655,7 @@ User Transmission: "${userText}"
       ];
 
   return (
-    <div className="h-screen bg-[#030303] text-zinc-300 font-sans flex flex-col relative select-none overflow-hidden scanline-effect">
+    <div className="h-full bg-[#030303] text-zinc-300 font-sans flex flex-col relative select-none overflow-hidden scanline-effect">
       
       {/* Background Particle Engine (Ritual Layer) */}
       <RitualLayer 
@@ -607,31 +678,41 @@ User Transmission: "${userText}"
       )}
 
       {/* Header Bar */}
-      <header className="h-16 border-b border-zinc-900 bg-black/60 backdrop-blur-xl flex items-center justify-between px-6 shrink-0 z-50 relative">
-        <div className="flex items-center gap-3">
-          <Cpu className="w-5 h-5 animate-pulse text-theme-primary" />
-          <h1 className="text-sm font-bold tracking-[0.25em] text-white">
-            NICOLE TERMINAL <span className="text-theme-primary font-light">//</span> DISCLOSURE HUB
-          </h1>
+      <header className="h-16 border-b border-zinc-900 bg-black/60 backdrop-blur-xl flex items-center justify-between px-4 sm:px-6 shrink-0 z-50 relative">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button 
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="p-1.5 text-zinc-400 hover:text-white transition-colors border border-zinc-800 rounded bg-zinc-950/50 hover:bg-zinc-900"
+            title="Toggle Repository"
+          >
+            <Menu className="w-4 h-4 text-theme-primary" />
+          </button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Cpu className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse text-theme-primary" />
+            <h1 className="text-xs sm:text-sm font-bold tracking-[0.1em] sm:tracking-[0.25em] text-white">
+              NICOLE TERMINAL <span className="text-theme-primary font-light">//</span> <span className="hidden sm:inline">DISCLOSURE HUB</span>
+            </h1>
+          </div>
         </div>
 
         {/* Global Stats / Settings Controls */}
-        <div className="flex items-center gap-4 text-xs font-mono">
+        <div className="flex items-center gap-2 sm:gap-4 text-xs font-mono">
           {attunedGenius && (
-            <div className="flex items-center gap-2 border border-purple-500/20 bg-purple-900/10 text-purple-400 px-3 py-1 rounded-sm">
-              <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-ping" />
-              ATTUNED: {attunedGenius.name.toUpperCase()}
-              <button onClick={clearAttunement} className="text-zinc-500 hover:text-white ml-1">×</button>
+            <div className="flex items-center gap-1 sm:gap-2 border border-purple-500/20 bg-purple-900/10 text-purple-400 px-2 py-0.5 sm:px-3 sm:py-1 rounded-sm text-[10px] sm:text-xs">
+              <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-ping hidden sm:inline-block" />
+              <span className="hidden sm:inline">ATTUNED: </span>{attunedGenius.name.toUpperCase()}
+              <button onClick={clearAttunement} className="text-zinc-500 hover:text-white ml-1 font-sans">×</button>
             </div>
           )}
 
           {/* Cipher Status Badge */}
           <button 
             onClick={() => setShowSettings(true)}
-            className={`flex items-center gap-2 px-3 py-1.5 border rounded-sm transition-all ${hasApiKey ? 'border-emerald-500/20 bg-emerald-950/20 text-emerald-400' : 'border-red-500/30 bg-red-950/20 text-red-400 animate-pulse'}`}
+            className={`flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 border rounded-sm transition-all text-[10px] sm:text-xs ${hasApiKey ? 'border-emerald-500/20 bg-emerald-950/20 text-emerald-400' : 'border-red-500/30 bg-red-950/20 text-red-400 animate-pulse'}`}
           >
             <Key className="w-3.5 h-3.5" />
-            <span>{hasApiKey ? 'CIPHER ONLINE' : 'CIPHER LOCKED'}</span>
+            <span className="hidden sm:inline">{hasApiKey ? 'CIPHER ONLINE' : 'CIPHER LOCKED'}</span>
+            <span className="sm:hidden">{hasApiKey ? 'ONLINE' : 'LOCKED'}</span>
           </button>
 
           <Login />
@@ -659,7 +740,7 @@ User Transmission: "${userText}"
       <div className="flex flex-1 overflow-hidden z-30 relative">
         
         {/* Left Side: Deck Repository & Upload */}
-        <aside className="w-72 border-r border-zinc-900 bg-black/30 backdrop-blur-lg flex flex-col shrink-0">
+        <aside className={`border-r border-zinc-900 bg-black/95 lg:bg-black/30 backdrop-blur-lg flex flex-col shrink-0 transition-all duration-300 ${isSidebarCollapsed ? 'w-0 -translate-x-full lg:w-0' : 'w-72 translate-x-0'} fixed lg:relative inset-y-0 left-0 z-50 h-[calc(100%-4rem)] mt-16 lg:h-auto lg:mt-0 overflow-hidden`}>
           <div className="p-4 border-b border-zinc-900 flex justify-between items-center bg-black/20">
             <h2 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
               <Database className="w-3.5 h-3.5 text-theme-primary" /> Slide Repository
@@ -825,7 +906,7 @@ User Transmission: "${userText}"
           <div 
             ref={workspaceViewportRef}
             tabIndex={0}
-            className="flex-1 overflow-y-auto custom-scrollbar p-6 flex flex-col justify-between z-10 outline-none"
+            className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 flex flex-col z-10 outline-none"
           >
             
             {activeDeck ? (
@@ -909,13 +990,39 @@ User Transmission: "${userText}"
 
                   {/* Right Column: Slide extracted text */}
                   <div className="space-y-4">
-                    <div className="border border-zinc-900 bg-black/50 rounded-lg p-5 backdrop-blur-md h-[440px] flex flex-col shadow-inner">
+                    <div className="border border-zinc-900 bg-black/50 rounded-lg p-4 sm:p-5 backdrop-blur-md h-[250px] lg:h-[440px] flex flex-col shadow-inner">
                       <div className="flex justify-between items-center border-b border-zinc-900 pb-3 mb-3">
                         <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
                           <Eye className="w-3.5 h-3.5 text-theme-primary" /> Slide Transcription
                         </span>
                         <span className="text-[9px] font-mono text-zinc-400">PAGE {activePageIndex + 1}</span>
                       </div>
+
+                      {/* Quick Audit Actions */}
+                      <div className="flex gap-2 mb-3 pb-3 border-b border-zinc-900/50 shrink-0">
+                        <button
+                          onClick={() => triggerQuickAction('explain')}
+                          className="flex-1 py-1.5 bg-zinc-950 hover:bg-zinc-900 hover:border-theme-primary/30 text-[8px] font-mono text-zinc-400 hover:text-white border border-zinc-900 rounded-sm tracking-wider uppercase transition-all"
+                          title="Ask Auditor to explain active slide"
+                        >
+                          🔍 Explain
+                        </button>
+                        <button
+                          onClick={() => triggerQuickAction('entities')}
+                          className="flex-1 py-1.5 bg-zinc-950 hover:bg-zinc-900 hover:border-theme-primary/30 text-[8px] font-mono text-zinc-400 hover:text-white border border-zinc-900 rounded-sm tracking-wider uppercase transition-all"
+                          title="Request breakdown of detected entities"
+                        >
+                          🧬 Entities
+                        </button>
+                        <button
+                          onClick={() => triggerQuickAction('anomalies')}
+                          className="flex-1 py-1.5 bg-zinc-950 hover:bg-zinc-900 hover:border-theme-primary/30 text-[8px] font-mono text-zinc-400 hover:text-white border border-zinc-900 rounded-sm tracking-wider uppercase transition-all"
+                          title="Scan slide for contradictions or redactions"
+                        >
+                          ⚠️ Anomalies
+                        </button>
+                      </div>
+
                       <div tabIndex={0} className="flex-1 overflow-y-auto custom-scrollbar text-xs leading-relaxed text-zinc-400 font-light pr-1 outline-none">
                         {activePage ? activePage.text : 'No text content available.'}
                       </div>
@@ -949,95 +1056,124 @@ User Transmission: "${userText}"
           </div>
 
           {/* Bottom Chat Terminal Container */}
-          <div className="p-6 border-t border-zinc-900 bg-black/70 backdrop-blur-md shrink-0">
-            <div className="max-w-4xl mx-auto flex flex-col gap-4">
-              
-              {/* Messages Area */}
-              <div tabIndex={0} className="h-[220px] overflow-y-auto custom-scrollbar space-y-4 pr-2 mb-2 flex flex-col outline-none">
-                {messages.map((msg, idx) => {
-                  const isUser = msg.role === 'user';
-                  return (
-                    <div key={idx} className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-                      <div className={`max-w-[85%] rounded-lg px-4 py-3 border transition-all ${isUser ? 'bg-theme-primary-10 border-theme-primary/30 text-emerald-100 shadow-[0_4px_20px_rgba(16,185,129,0.05)]' : 'bg-zinc-950/80 border-zinc-900 text-zinc-300'}`}>
-                        
-                        {/* Header metadata */}
-                        <div className="flex justify-between items-center text-[9px] font-mono uppercase tracking-widest opacity-50 mb-1.5">
-                          <span>{isUser ? 'ANALYST // OPERATOR' : 'GNOSTIC AUDITOR'}</span>
-                          <span>{msg.timestamp || new Date().toLocaleTimeString()}</span>
-                        </div>
+          {isChatCollapsed ? (
+            <div 
+              onClick={() => setIsChatCollapsed(false)}
+              className="h-12 border-t border-zinc-900 bg-black/80 hover:bg-zinc-900/60 backdrop-blur-md px-6 flex items-center justify-between shrink-0 cursor-pointer transition-all duration-300 z-40 relative shadow-[0_-4px_20px_rgba(0,0,0,0.5)]"
+            >
+              <div className="flex items-center gap-2 text-[10px] sm:text-xs font-mono text-theme-primary">
+                <MessageSquare className="w-4 h-4 animate-pulse" />
+                <span>COGNITIVE CHAT CONSOLE [MINIMIZED] // CLICK TO EXPAND LOG</span>
+              </div>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsChatCollapsed(false);
+                }}
+                className="p-1.5 hover:text-white text-zinc-500 transition-colors"
+                title="Expand Chat Console"
+              >
+                <ChevronUp className="w-4 h-4 text-theme-primary" />
+              </button>
+            </div>
+          ) : (
+            <div className="p-4 sm:p-6 border-t border-zinc-900 bg-black/70 backdrop-blur-md shrink-0 transition-all duration-300 relative">
+              {/* Collapse Button */}
+              <button 
+                onClick={() => setIsChatCollapsed(true)}
+                className="absolute top-3 right-4 p-1 text-zinc-500 hover:text-zinc-300 transition-colors z-50"
+                title="Collapse Chat Console"
+              >
+                <ChevronDown className="w-4.5 h-4.5" />
+              </button>
 
-                        {/* Message Content */}
-                        <div className="text-xs leading-relaxed whitespace-pre-wrap font-light">
-                          {msg.content}
-                        </div>
-
-                        {/* Citations */}
-                        {msg.citations && msg.citations.length > 0 && (
-                          <div className="mt-3 pt-2 border-t border-zinc-900/60 flex flex-wrap gap-2 items-center">
-                            <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest">Citations:</span>
-                            {msg.citations.map((cit, cIdx) => (
-                              <button
-                                key={cIdx}
-                                onClick={() => {
-                                  const matchingDeck = decks.find(d => d.name === cit.docName);
-                                  if (matchingDeck) {
-                                    setActiveDeckId(matchingDeck.id);
-                                    setActivePageIndex(cit.pageNumber - 1);
-                                  }
-                                }}
-                                className="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-[8px] font-mono text-theme-primary border border-zinc-800 rounded uppercase tracking-wider transition-colors"
-                              >
-                                {cit.docName.slice(0, 15)}... (P.{cit.pageNumber})
-                              </button>
-                            ))}
+              <div className="max-w-4xl mx-auto flex flex-col gap-4 mt-2">
+                {/* Messages Area */}
+                <div tabIndex={0} className="h-[150px] sm:h-[220px] overflow-y-auto custom-scrollbar space-y-4 pr-2 mb-2 flex flex-col outline-none">
+                  {messages.map((msg, idx) => {
+                    const isUser = msg.role === 'user';
+                    return (
+                      <div key={idx} className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
+                        <div className={`max-w-[85%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 border transition-all ${isUser ? 'bg-theme-primary-10 border-theme-primary/30 text-emerald-100 shadow-[0_4px_20px_rgba(16,185,129,0.05)]' : 'bg-zinc-950/80 border-zinc-900 text-zinc-300'}`}>
+                          
+                          {/* Header metadata */}
+                          <div className="flex justify-between items-center text-[9px] font-mono uppercase tracking-widest opacity-50 mb-1.5">
+                            <span>{isUser ? 'ANALYST // OPERATOR' : 'GNOSTIC AUDITOR'}</span>
+                            <span>{msg.timestamp || new Date().toLocaleTimeString()}</span>
                           </div>
-                        )}
 
+                          {/* Message Content */}
+                          <div className="text-xs leading-relaxed whitespace-pre-wrap font-light">
+                            {msg.content}
+                          </div>
+
+                          {/* Citations */}
+                          {msg.citations && msg.citations.length > 0 && (
+                            <div className="mt-3 pt-2 border-t border-zinc-900/60 flex flex-wrap gap-2 items-center">
+                              <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest">Citations:</span>
+                              {msg.citations.map((cit, cIdx) => (
+                                <button
+                                  key={cIdx}
+                                  onClick={() => {
+                                    const matchingDeck = decks.find(d => d.name === cit.docName);
+                                    if (matchingDeck) {
+                                      setActiveDeckId(matchingDeck.id);
+                                      setActivePageIndex(cit.pageNumber - 1);
+                                    }
+                                  }}
+                                  className="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-[8px] font-mono text-theme-primary border border-zinc-800 rounded uppercase tracking-wider transition-colors"
+                                >
+                                  {cit.docName.slice(0, 15)}... (P.{cit.pageNumber})
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {isChatLoading && (
+                    <div className="flex justify-start mb-4">
+                      <div className="bg-zinc-950/80 border border-zinc-900 rounded-lg px-4 py-3 text-xs font-mono text-theme-primary animate-pulse uppercase tracking-widest">
+                        AUDITING COGNITIVE FIELDS...
                       </div>
                     </div>
-                  );
-                })}
-                {isChatLoading && (
-                  <div className="flex justify-start mb-4">
-                    <div className="bg-zinc-950/80 border border-zinc-900 rounded-lg px-4 py-3 text-xs font-mono text-theme-primary animate-pulse uppercase tracking-widest">
-                      AUDITING COGNITIVE FIELDS...
-                    </div>
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Chat Input Bar */}
+                <div className="flex items-center gap-2 sm:gap-4 bg-zinc-950 border border-zinc-900 rounded-lg p-1.5 sm:p-2 focus-within:border-theme-primary/50 transition-colors shadow-inner">
+                  {/* Search Scope Switcher */}
+                  <button
+                    onClick={() => setSearchScope(prev => prev === 'active' ? 'global' : 'active')}
+                    className={`px-2 py-1.5 sm:px-3 sm:py-2 text-[9px] font-mono rounded border uppercase transition-colors shrink-0 ${searchScope === 'active' ? 'border-theme-primary/30 text-theme-primary bg-theme-primary/5' : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'}`}
+                    title="Search scope: currently attuned deck vs all decks"
+                  >
+                    <span className="hidden sm:inline">SCOPE: </span>{searchScope === 'active' ? 'ATTUNED' : 'GLOBAL'}
+                  </button>
+
+                  <input 
+                    type="text"
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSendChat()}
+                    placeholder="Query Gnostic Auditor..."
+                    className="flex-1 bg-transparent border-none outline-none text-zinc-200 placeholder:text-zinc-700 text-xs px-1 sm:px-2"
+                  />
+
+                  <button 
+                    onClick={() => handleSendChat()}
+                    disabled={isChatLoading}
+                    className="p-2 sm:p-2.5 bg-theme-primary hover:bg-emerald-500 disabled:opacity-40 text-black font-bold rounded transition-colors flex items-center justify-center"
+                  >
+                    <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+                </div>
               </div>
-
-              {/* Chat Input Bar */}
-              <div className="flex items-center gap-4 bg-zinc-950 border border-zinc-900 rounded-lg p-2 focus-within:border-theme-primary/50 transition-colors shadow-inner">
-                {/* Search Scope Switcher */}
-                <button
-                  onClick={() => setSearchScope(prev => prev === 'active' ? 'global' : 'active')}
-                  className={`px-3 py-2 text-[9px] font-mono rounded border uppercase transition-colors shrink-0 ${searchScope === 'active' ? 'border-theme-primary/30 text-theme-primary bg-theme-primary/5' : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'}`}
-                  title="Search scope: currently attuned deck vs all decks"
-                >
-                  SCOPE: {searchScope === 'active' ? 'ATTUNED' : 'GLOBAL'}
-                </button>
-
-                <input 
-                  type="text"
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSendChat()}
-                  placeholder="Query Gnostic Auditor regarding slide contexts..."
-                  className="flex-1 bg-transparent border-none outline-none text-zinc-200 placeholder:text-zinc-700 text-xs px-2"
-                />
-
-                <button 
-                  onClick={handleSendChat}
-                  disabled={isChatLoading}
-                  className="p-2.5 bg-theme-primary hover:bg-emerald-500 disabled:opacity-40 text-black font-bold rounded transition-colors flex items-center justify-center"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
-
             </div>
-          </div>
+          )}
         </main>
       </div>
 
