@@ -29,7 +29,7 @@ const DisclosureWorkspace: React.FC = () => {
   const [geniusTint, setGeniusTint] = useState<string | null>(null);
   
   // Ticker, Tags, Rotation State
-  const [rotationMode, setRotationMode] = useState<'paused' | 'simulated' | 'realtime'>('paused');
+  const [rotationMode, setRotationMode] = useState<'paused' | 'fast' | 'slow'>('paused');
   const [hologramOpacity, setHologramOpacity] = useState<number>(0.08);
   const [selectedEntity, setSelectedEntity] = useState<string | null>(null);
   
@@ -42,6 +42,7 @@ const DisclosureWorkspace: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Chat State
   const [chatInput, setChatInput] = useState('');
@@ -49,11 +50,13 @@ const DisclosureWorkspace: React.FC = () => {
   const [messages, setMessages] = useState<{
     role: 'user' | 'ai';
     content: string;
+    timestamp: string;
     citations?: { docName: string; pageNumber: number }[];
   }[]>([
     { 
       role: 'ai', 
-      content: 'Local terminal initialized. Ready for file analysis, narrative audits, and gnostic attunement. Connect your API cipher key, upload slide decks, or ask a question.' 
+      content: 'Local terminal initialized. Ready for file analysis, narrative audits, and gnostic attunement. Connect your API cipher key, upload slide decks, or ask a question.',
+      timestamp: new Date().toLocaleTimeString()
     }
   ]);
   const [isChatLoading, setIsChatLoading] = useState(false);
@@ -93,6 +96,11 @@ const DisclosureWorkspace: React.FC = () => {
     loadDecks();
   }, []);
 
+  // Scroll chat messages to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isChatLoading]);
+
   // --- 2. THEME COLOR CONTROLLER ---
   useEffect(() => {
     let palette = ['#10b981', '#8b5cf6', '#f59e0b']; // Default Emerald, Purple, Amber
@@ -114,29 +122,19 @@ const DisclosureWorkspace: React.FC = () => {
 
   // --- 3. ROTATION SLIDESHOW ENGINE ---
   useEffect(() => {
-    if (rotationMode === 'paused' || decks.length === 0) return;
+    if (rotationMode === 'paused' || decks.length === 0 || !activeDeckId) return;
 
-    const intervalTime = rotationMode === 'simulated' ? 30000 : 7200000; // 30s vs 2 hours
+    const deck = decks.find(d => d.id === activeDeckId);
+    if (!deck) return;
+
+    const intervalTime = rotationMode === 'fast' ? 7000 : 30000; // 7s for fast cycle, 30s for slow cycle
 
     const timer = setInterval(() => {
-      if (!activeDeckId) return;
-
-      const currentDeckIndex = decks.findIndex(d => d.id === activeDeckId);
-      const deck = decks[currentDeckIndex];
-
-      if (activePageIndex < deck.totalPages - 1) {
-        // Go to next page
-        setActivePageIndex(prev => prev + 1);
-      } else {
-        // Go to next deck
-        const nextDeckIndex = (currentDeckIndex + 1) % decks.length;
-        setActiveDeckId(decks[nextDeckIndex].id);
-        setActivePageIndex(0);
-      }
+      setActivePageIndex(prev => (prev + 1) % deck.totalPages);
     }, intervalTime);
 
     return () => clearInterval(timer);
-  }, [rotationMode, activeDeckId, activePageIndex, decks]);
+  }, [rotationMode, activeDeckId, decks]);
 
   // --- 4. DRAG & DROP FILE UPLOAD HANDLERS ---
   const handleDragOver = (e: React.DragEvent) => {
@@ -215,7 +213,8 @@ const DisclosureWorkspace: React.FC = () => {
 
       setMessages(prev => [...prev, {
         role: 'ai',
-        content: `Deck "${newDeck.name}" successfully parsed. Encoded Gematria signature: [AEON_${newDeck.harmonicSignature}]. Wavelength attunement established.`
+        content: `Deck "${newDeck.name}" successfully parsed. Encoded Gematria signature: [AEON_${newDeck.harmonicSignature}]. Wavelength attunement established.`,
+        timestamp: new Date().toLocaleTimeString()
       }]);
     } catch (err: any) {
       console.error(err);
@@ -266,7 +265,8 @@ const DisclosureWorkspace: React.FC = () => {
 
     setMessages(prev => [...prev, {
       role: 'ai',
-      content: `Aetheric tuning focused on Genius: ${genius.name} (${genius.hebrew}). Attunement mode: ${genius.id % 3 === 0 ? 'VORTEX' : genius.id % 3 === 1 ? 'CONSTELLATION' : 'RANDOM WALK'}. ${genius.attribute ? `Applying lens: ${genius.attribute}` : ''}`
+      content: `Aetheric tuning focused on Genius: ${genius.name} (${genius.hebrew}). Attunement mode: ${genius.id % 3 === 0 ? 'VORTEX' : genius.id % 3 === 1 ? 'CONSTELLATION' : 'RANDOM WALK'}. ${genius.attribute ? `Applying lens: ${genius.attribute}` : ''}`,
+      timestamp: new Date().toLocaleTimeString()
     }]);
   };
 
@@ -333,13 +333,18 @@ const DisclosureWorkspace: React.FC = () => {
       setShowSettings(true);
       setMessages(prev => [...prev, {
         role: 'ai',
-        content: 'Auditing halted: Cipher access denied. Please set your Gemini API Key in the settings panel to connect to the cognitive fields.'
+        content: 'Auditing halted: Cipher access denied. Please set your Gemini API Key in the settings panel to connect to the cognitive fields.',
+        timestamp: new Date().toLocaleTimeString()
       }]);
       return;
     }
 
     const userText = chatInput;
-    setMessages(prev => [...prev, { role: 'user', content: userText }]);
+    setMessages(prev => [...prev, { 
+      role: 'user', 
+      content: userText,
+      timestamp: new Date().toLocaleTimeString()
+    }]);
     setChatInput('');
     setIsChatLoading(true);
 
@@ -357,11 +362,79 @@ const DisclosureWorkspace: React.FC = () => {
       const promptPayload = `
 [Document Search Scope: ${searchScope.toUpperCase()}]
 ${contextText ? `[Archive Context For Analysis:\n${contextText}\n]` : '[No relevant archive documents found. Fallback to general database.]'}
+${activePage ? `[Currently Active Slide Viewport: Page ${activePage.pageNumber} of "${activeDeck?.name}". A visual image of this slide is attached to your parts payload for multimodal auditing.]` : ''}
 
 User Transmission: "${userText}"
 `;
 
-      // 4. Perform direct fetch call to Google Generative Language endpoint
+      const parts: any[] = [{ text: promptPayload }];
+
+      // 4. Attach active slide image for Gemini multimodal analysis
+      if (activePage && activePage.image) {
+        const base64Data = activePage.image.split(',')[1];
+        if (base64Data) {
+          parts.push({
+            inlineData: {
+              mimeType: 'image/jpeg',
+              data: base64Data
+            }
+          });
+        }
+      }
+
+      // 5. Define Tools for Gemini Function Calling
+      const tools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'set_active_slide',
+              description: 'Sets the currently displayed slide page index to direct the user\'s focus to a specific slide.',
+              parameters: {
+                type: 'OBJECT',
+                properties: {
+                  pageNumber: {
+                    type: 'INTEGER',
+                    description: 'The 1-based page number of the slide to display.'
+                  }
+                },
+                required: ['pageNumber']
+              }
+            },
+            {
+              name: 'set_rotation_mode',
+              description: 'Adjusts the auto-rotation/slideshow cycle mode. Use this to pause or play (fast/slow) the slideshow.',
+              parameters: {
+                type: 'OBJECT',
+                properties: {
+                  mode: {
+                    type: 'STRING',
+                    enum: ['paused', 'fast', 'slow'],
+                    description: 'The slideshow rotation state: paused (no cycle), fast (7s speed), or slow (30s speed).'
+                  }
+                },
+                required: ['mode']
+              }
+            },
+            {
+              name: 'set_particles_mode',
+              description: 'Attunes the background sacred geometry/particle manifestation layer to a new design.',
+              parameters: {
+                type: 'OBJECT',
+                properties: {
+                  mode: {
+                    type: 'STRING',
+                    enum: ['random', 'vortex', 'constellation'],
+                    description: 'The flow pattern of background nodes.'
+                  }
+                },
+                required: ['mode']
+              }
+            }
+          ]
+        }
+      ];
+
+      // 6. Perform direct fetch call to Google Generative Language endpoint
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
         {
@@ -373,12 +446,13 @@ User Transmission: "${userText}"
             contents: [
               {
                 role: 'user',
-                parts: [{ text: promptPayload }]
+                parts: parts
               }
             ],
             systemInstruction: {
               parts: [{ text: customSystemInstruction }]
-            }
+            },
+            tools: tools
           })
         }
       );
@@ -388,12 +462,82 @@ User Transmission: "${userText}"
         throw new Error(errJson.error?.message || `HTTP error ${response.status}`);
       }
 
-      const resData = await response.json();
+      let resData = await response.json();
+      const candidate = resData.candidates?.[0];
+      const contentParts = candidate?.content?.parts;
+      const functionCall = contentParts?.find((p: any) => p.functionCall)?.functionCall;
+
+      if (functionCall) {
+        const { name, args } = functionCall;
+        let functionResult: any = { status: "success" };
+
+        if (name === "set_active_slide") {
+          const pageNum = args.pageNumber;
+          if (activeDeck && pageNum >= 1 && pageNum <= activeDeck.totalPages) {
+            setActivePageIndex(pageNum - 1);
+            functionResult = { status: "success", message: `Active slide successfully changed to page ${pageNum}.` };
+          } else {
+            functionResult = { status: "error", message: `Page number ${pageNum} is out of bounds for the current deck (total pages: ${activeDeck ? activeDeck.totalPages : 0}).` };
+          }
+        } else if (name === "set_rotation_mode") {
+          const mode = args.mode;
+          setRotationMode(mode);
+          functionResult = { status: "success", message: `Rotation mode successfully updated to ${mode}.` };
+        } else if (name === "set_particles_mode") {
+          const mode = args.mode;
+          setParticleMode(mode);
+          functionResult = { status: "success", message: `Background particle mode successfully updated to ${mode}.` };
+        }
+
+        // Send the function response back to Gemini to get a natural language confirmation!
+        const nextResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: 'user',
+                  parts: parts
+                },
+                candidate.content,
+                {
+                  role: 'function',
+                  parts: [
+                    {
+                      functionResponse: {
+                        name: name,
+                        response: functionResult
+                      }
+                    }
+                  ]
+                }
+              ],
+              systemInstruction: {
+                parts: [{ text: customSystemInstruction }]
+              },
+              tools: tools
+            })
+          }
+        );
+
+        if (!nextResponse.ok) {
+          const errJson = await nextResponse.json();
+          throw new Error(errJson.error?.message || `HTTP error ${nextResponse.status}`);
+        }
+
+        resData = await nextResponse.json();
+      }
+
       const answerText = resData.candidates?.[0]?.content?.parts?.[0]?.text || 'Resonance faded. No transmission received.';
 
       setMessages(prev => [...prev, {
         role: 'ai',
         content: answerText,
+        timestamp: new Date().toLocaleTimeString(),
         citations: citations.length > 0 ? citations : undefined
       }]);
 
@@ -401,7 +545,8 @@ User Transmission: "${userText}"
       console.error(err);
       setMessages(prev => [...prev, {
         role: 'ai',
-        content: `Aetheric Divergence: Connection to Gemini API broken. Reason: ${err.message}`
+        content: `Aetheric Divergence: Connection to Gemini API broken. Reason: ${err.message}`,
+        timestamp: new Date().toLocaleTimeString()
       }]);
     } finally {
       setIsChatLoading(false);
@@ -631,17 +776,24 @@ User Transmission: "${userText}"
                 <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-900 p-0.5 rounded-sm">
                   <button 
                     onClick={() => setRotationMode('paused')}
-                    className={`p-1.5 rounded-sm transition-colors ${rotationMode === 'paused' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:text-zinc-300'}`}
-                    title="Pause Rotation"
+                    className={`p-1.5 rounded-sm transition-colors ${rotationMode === 'paused' ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    title="Pause Slideshow"
                   >
                     <Pause className="w-3 h-3" />
                   </button>
                   <button 
-                    onClick={() => setRotationMode('simulated')}
-                    className={`p-1.5 rounded-sm transition-colors ${rotationMode === 'simulated' ? 'bg-zinc-900 text-theme-primary' : 'text-zinc-600 hover:text-zinc-300'}`}
-                    title="Cycle Pages (30s Demo)"
+                    onClick={() => setRotationMode('fast')}
+                    className={`px-2 py-1 text-[9px] font-mono rounded-sm transition-colors ${rotationMode === 'fast' ? 'bg-zinc-900 text-theme-primary font-bold' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    title="Auto Cycle (7s speed)"
                   >
-                    <Play className="w-3 h-3" />
+                    CYCLE:FAST
+                  </button>
+                  <button 
+                    onClick={() => setRotationMode('slow')}
+                    className={`px-2 py-1 text-[9px] font-mono rounded-sm transition-colors ${rotationMode === 'slow' ? 'bg-zinc-900 text-theme-primary font-bold' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    title="Cycle Pages (30s speed)"
+                  >
+                    CYCLE:SLOW
                   </button>
                 </div>
 
@@ -692,7 +844,7 @@ User Transmission: "${userText}"
                 </div>
 
                 {/* Primary Projection Hub (Active Slide display) */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
                   
                   {/* Left Column: Visual Projection */}
                   <div className="lg:col-span-2 space-y-4">
@@ -744,8 +896,8 @@ User Transmission: "${userText}"
                   </div>
 
                   {/* Right Column: Slide extracted text */}
-                  <div className="space-y-4">
-                    <div className="border border-zinc-900 bg-black/50 rounded-lg p-5 backdrop-blur-md h-[300px] flex flex-col shadow-inner">
+                  <div className="flex flex-col justify-between h-full space-y-4">
+                    <div className="border border-zinc-900 bg-black/50 rounded-lg p-5 backdrop-blur-md flex-1 flex flex-col shadow-inner min-h-[300px]">
                       <div className="flex justify-between items-center border-b border-zinc-900 pb-3 mb-3">
                         <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase flex items-center gap-1.5">
                           <Eye className="w-3.5 h-3.5 text-theme-primary" /> Slide Transcription
@@ -789,60 +941,58 @@ User Transmission: "${userText}"
             <div className="max-w-4xl mx-auto flex flex-col gap-4">
               
               {/* Messages Area */}
-              <div className="h-[220px] overflow-y-auto custom-scrollbar space-y-4 pr-2 mb-2 flex flex-col-reverse">
-                <div>
-                  {/* We map messages in normal order but container handles scrolling */}
-                  {messages.map((msg, idx) => {
-                    const isUser = msg.role === 'user';
-                    return (
-                      <div key={idx} className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-                        <div className={`max-w-[85%] rounded-lg px-4 py-3 border transition-all ${isUser ? 'bg-theme-primary-10 border-theme-primary/30 text-emerald-100 shadow-[0_4px_20px_rgba(16,185,129,0.05)]' : 'bg-zinc-950/80 border-zinc-900 text-zinc-300'}`}>
-                          
-                          {/* Header metadata */}
-                          <div className="flex justify-between items-center text-[9px] font-mono uppercase tracking-widest opacity-50 mb-1.5">
-                            <span>{isUser ? 'ANALYST // OPERATOR' : 'GNOSTIC AUDITOR'}</span>
-                            <span>{new Date().toLocaleTimeString()}</span>
-                          </div>
-
-                          {/* Message Content */}
-                          <div className="text-xs leading-relaxed whitespace-pre-wrap font-light">
-                            {msg.content}
-                          </div>
-
-                          {/* Citations */}
-                          {msg.citations && msg.citations.length > 0 && (
-                            <div className="mt-3 pt-2 border-t border-zinc-900/60 flex flex-wrap gap-2 items-center">
-                              <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest">Citations:</span>
-                              {msg.citations.map((cit, cIdx) => (
-                                <button
-                                  key={cIdx}
-                                  onClick={() => {
-                                    const matchingDeck = decks.find(d => d.name === cit.docName);
-                                    if (matchingDeck) {
-                                      setActiveDeckId(matchingDeck.id);
-                                      setActivePageIndex(cit.pageNumber - 1);
-                                    }
-                                  }}
-                                  className="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-[8px] font-mono text-theme-primary border border-zinc-800 rounded uppercase tracking-wider transition-colors"
-                                >
-                                  {cit.docName.slice(0, 15)}... (P.{cit.pageNumber})
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
+              <div className="h-[220px] overflow-y-auto custom-scrollbar space-y-4 pr-2 mb-2 flex flex-col">
+                {messages.map((msg, idx) => {
+                  const isUser = msg.role === 'user';
+                  return (
+                    <div key={idx} className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
+                      <div className={`max-w-[85%] rounded-lg px-4 py-3 border transition-all ${isUser ? 'bg-theme-primary-10 border-theme-primary/30 text-emerald-100 shadow-[0_4px_20px_rgba(16,185,129,0.05)]' : 'bg-zinc-950/80 border-zinc-900 text-zinc-300'}`}>
+                        
+                        {/* Header metadata */}
+                        <div className="flex justify-between items-center text-[9px] font-mono uppercase tracking-widest opacity-50 mb-1.5">
+                          <span>{isUser ? 'ANALYST // OPERATOR' : 'GNOSTIC AUDITOR'}</span>
+                          <span>{msg.timestamp || new Date().toLocaleTimeString()}</span>
                         </div>
-                      </div>
-                    );
-                  })}
-                  {isChatLoading && (
-                    <div className="flex justify-start mb-4">
-                      <div className="bg-zinc-950/80 border border-zinc-900 rounded-lg px-4 py-3 text-xs font-mono text-theme-primary animate-pulse uppercase tracking-widest">
-                        AUDITING COGNITIVE FIELDS...
+
+                        {/* Message Content */}
+                        <div className="text-xs leading-relaxed whitespace-pre-wrap font-light">
+                          {msg.content}
+                        </div>
+
+                        {/* Citations */}
+                        {msg.citations && msg.citations.length > 0 && (
+                          <div className="mt-3 pt-2 border-t border-zinc-900/60 flex flex-wrap gap-2 items-center">
+                            <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest">Citations:</span>
+                            {msg.citations.map((cit, cIdx) => (
+                              <button
+                                key={cIdx}
+                                onClick={() => {
+                                  const matchingDeck = decks.find(d => d.name === cit.docName);
+                                  if (matchingDeck) {
+                                    setActiveDeckId(matchingDeck.id);
+                                    setActivePageIndex(cit.pageNumber - 1);
+                                  }
+                                }}
+                                className="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-[8px] font-mono text-theme-primary border border-zinc-800 rounded uppercase tracking-wider transition-colors"
+                              >
+                                {cit.docName.slice(0, 15)}... (P.{cit.pageNumber})
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
                       </div>
                     </div>
-                  )}
-                </div>
+                  );
+                })}
+                {isChatLoading && (
+                  <div className="flex justify-start mb-4">
+                    <div className="bg-zinc-950/80 border border-zinc-900 rounded-lg px-4 py-3 text-xs font-mono text-theme-primary animate-pulse uppercase tracking-widest">
+                      AUDITING COGNITIVE FIELDS...
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
               </div>
 
               {/* Chat Input Bar */}
