@@ -584,7 +584,7 @@ User Transmission: "${userText}"
       ];
 
   return (
-    <div className="min-h-screen bg-[#030303] text-zinc-300 font-sans flex flex-col relative select-none overflow-hidden scanline-effect">
+    <div className="h-screen bg-[#030303] text-zinc-300 font-sans flex flex-col relative select-none overflow-hidden scanline-effect">
       
       {/* Background Particle Engine (Ritual Layer) */}
       <RitualLayer 
