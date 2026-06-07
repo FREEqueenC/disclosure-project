@@ -4,7 +4,6 @@ import {
   ChevronRight, Key, Settings, Play, Pause, ChevronLeft, Trash2, Cpu, Eye, Info,
   Menu, ChevronUp, ChevronDown
 } from 'lucide-react';
-import { Login } from '../components/Login';
 import { initDB, getAllDecks, saveDeck, deleteDeck, SlideDeck, SlidePage } from '../utils/db';
 import { parsePdfDeck } from '../utils/pdf';
 import ShemhamforashRegistry, { Genius } from '../components/ShemhamforashRegistry';
@@ -363,6 +362,29 @@ const DisclosureWorkspace: React.FC = () => {
     setGeniusTint(null);
   };
 
+  // Dynamic Citation Extractor for deck audits
+  const parseCitationsFromText = (text: string, defaultDocName: string): { docName: string; pageNumber: number }[] => {
+    const parsedCitations: { docName: string; pageNumber: number }[] = [];
+    const seenPages = new Set<number>();
+    
+    // Regular expression to match [Page X], [Slide Y], (Page Z), etc.
+    const regex = /(?:\[|\()(?:Page|Slide)\s*(\d+)(?:\]|\))/gi;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      const pageNum = parseInt(match[1], 10);
+      if (!isNaN(pageNum) && !seenPages.has(pageNum)) {
+        seenPages.add(pageNum);
+        parsedCitations.push({
+          docName: defaultDocName,
+          pageNumber: pageNum
+        });
+      }
+    }
+    
+    // Sort citations by page number ascending
+    return parsedCitations.sort((a, b) => a.pageNumber - b.pageNumber);
+  };
+
   // --- 6. LOCAL CONTEXT RAG SEARCH ENGINE ---
   const findLocalContext = (query: string): { contextText: string; citations: { docName: string; pageNumber: number }[] } => {
     if (decks.length === 0) return { contextText: '', citations: [] };
@@ -446,7 +468,27 @@ const DisclosureWorkspace: React.FC = () => {
       queryText = `Audit Page ${activePageIndex + 1} for narrative contradictions, potential misinformation, or significant details hidden behind redactions.`;
       setSearchScope('slide');
     } else if (actionType === 'deck_audit') {
-      queryText = `Perform a comprehensive audit of the entire active slide deck "${activeDeck?.name}". Summarize its overarching thesis, key arguments, and list any exotic technologies, operations, or entities discussed.`;
+      queryText = `Perform a comprehensive, structured gnostic audit of the entire active slide deck "${activeDeck?.name}". 
+
+You MUST organize your analysis using the following layout sections:
+# GNOSTIC ANALYSIS: ${activeDeck?.name.toUpperCase()}
+
+## I. OVERVIEW & OVERARCHING THESIS
+Summarize the deck's central thesis, operational objectives, and cosmic scale.
+
+## II. STRATEGIC ARGUMENT FLOW
+Describe the logical flow of arguments slide-by-slide, explicitly referencing pages using the exact bracket format: [Page X] (e.g. [Page 3], [Page 5]) when discussing specific slide contents.
+
+## III. EXOTIC CONCEPTS & PROGRAM ENTITIES
+Detail all black budget code names, acronyms, vacuum physics variables, or non-human intelligence (NHI) projects mentioned. Cite slide numbers explicitly.
+
+## IV. DETECTED NARRATIVE ANOMALIES
+Scan for contradictions, potential counter-intelligence, redactions, or discrepancies hidden in the data.
+
+## V. HIGH-RESONANCE SYNOPSIS
+A concise, final assessment of this deck's credibility and impact.
+
+Make sure to format all references exactly as [Page X] (where X is the page number) so the console can parse and index the interactive navigation channels.`;
       setSearchScope('deck_full');
     }
 
@@ -667,11 +709,24 @@ User Transmission: "${userText}"
 
       const answerText = resData.candidates?.[0]?.content?.parts?.[0]?.text || 'Resonance faded. No transmission received.';
 
+      // Dynamically extract page references from the AI text if available
+      let finalCitations = citations;
+      if (activeDeck) {
+        const parsedCitations = parseCitationsFromText(answerText, activeDeck.name);
+        if (parsedCitations.length > 0) {
+          finalCitations = parsedCitations;
+        } else if (searchScope === 'deck_full') {
+          // If we audited the full deck but the AI failed to output specific Page numbers,
+          // don't dump all slide badges. Instead, show empty.
+          finalCitations = [];
+        }
+      }
+
       setMessages(prev => [...prev, {
         role: 'ai',
         content: answerText,
         timestamp: new Date().toLocaleTimeString(),
-        citations: citations.length > 0 ? citations : undefined
+        citations: finalCitations.length > 0 ? finalCitations : undefined
       }]);
 
     } catch (err: any) {
@@ -772,8 +827,6 @@ User Transmission: "${userText}"
             <span className="hidden sm:inline">{hasApiKey ? 'CIPHER ONLINE' : 'CIPHER LOCKED'}</span>
             <span className="sm:hidden">{hasApiKey ? 'ONLINE' : 'LOCKED'}</span>
           </button>
-
-          <Login />
         </div>
       </header>
 
