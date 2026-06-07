@@ -43,6 +43,7 @@ const DisclosureWorkspace: React.FC = () => {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const workspaceViewportRef = useRef<HTMLDivElement>(null);
 
   // Chat State
   const [chatInput, setChatInput] = useState('');
@@ -100,6 +101,13 @@ const DisclosureWorkspace: React.FC = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isChatLoading]);
+
+  // Focus workspace viewport for keyboard scrolling on deck change
+  useEffect(() => {
+    if (activeDeckId) {
+      workspaceViewportRef.current?.focus();
+    }
+  }, [activeDeckId]);
 
   // --- 2. THEME COLOR CONTROLLER ---
   useEffect(() => {
@@ -695,7 +703,7 @@ User Transmission: "${userText}"
           </div>
 
           {/* List of Slide Decks */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar px-3 space-y-2 pb-6">
+          <div tabIndex={0} className="flex-1 overflow-y-auto custom-scrollbar px-3 space-y-2 pb-6 outline-none">
             {decks.map(deck => {
               const isActive = deck.id === activeDeckId;
               return (
@@ -814,7 +822,11 @@ User Transmission: "${userText}"
           </div>
 
           {/* Active Workspace Viewport */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-6 flex flex-col justify-between z-10">
+          <div 
+            ref={workspaceViewportRef}
+            tabIndex={0}
+            className="flex-1 overflow-y-auto custom-scrollbar p-6 flex flex-col justify-between z-10 outline-none"
+          >
             
             {activeDeck ? (
               <div className="space-y-6">
@@ -904,7 +916,7 @@ User Transmission: "${userText}"
                         </span>
                         <span className="text-[9px] font-mono text-zinc-400">PAGE {activePageIndex + 1}</span>
                       </div>
-                      <div className="flex-1 overflow-y-auto custom-scrollbar text-xs leading-relaxed text-zinc-400 font-light pr-1">
+                      <div tabIndex={0} className="flex-1 overflow-y-auto custom-scrollbar text-xs leading-relaxed text-zinc-400 font-light pr-1 outline-none">
                         {activePage ? activePage.text : 'No text content available.'}
                       </div>
                     </div>
@@ -941,7 +953,7 @@ User Transmission: "${userText}"
             <div className="max-w-4xl mx-auto flex flex-col gap-4">
               
               {/* Messages Area */}
-              <div className="h-[220px] overflow-y-auto custom-scrollbar space-y-4 pr-2 mb-2 flex flex-col">
+              <div tabIndex={0} className="h-[220px] overflow-y-auto custom-scrollbar space-y-4 pr-2 mb-2 flex flex-col outline-none">
                 {messages.map((msg, idx) => {
                   const isUser = msg.role === 'user';
                   return (
