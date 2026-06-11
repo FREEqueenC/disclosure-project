@@ -110,6 +110,49 @@ app.get('/api/resonance-sync/:sessionId', async (req, res) => {
   }
 });
 
+
+// SECURE GEMINI API PROXY (Bypasses client-side API Key necessity)
+app.post('/api/chat/proxy', async (req, res) => {
+  logger.info('Proxying request to Google Generative Language API');
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      logger.error('GEMINI_API_KEY is not configured on the backend');
+      return res.status(500).json({
+        error: 'Backend Configuration Error',
+        details: 'GEMINI_API_KEY is missing from the environment variables.'
+      });
+    }
+
+    // Default to gemini-1.5-flash if model not provided in query
+    const model = req.query.model || 'gemini-1.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(req.body)
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      logger.error('Google Generative Language API returned an error', { status: response.status, error: errJson });
+      return res.status(response.status).json(errJson);
+    }
+
+    const resData = await response.json();
+    res.json(resData);
+  } catch (error: any) {
+    logger.error('Proxy Gemini API Exception', { error: error.message, stack: error.stack });
+    res.status(500).json({
+      error: 'Proxy Gemini API Failure',
+      details: error.message
+    });
+  }
+});
+
 // GNOSTIC AUDITOR (Live Vertex AI)
 app.post('/api/chat', async (req, res) => {
   const { message, clearance, balance } = req.body;

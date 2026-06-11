@@ -2,13 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageSquare, FileText, ShieldAlert, Database, Upload, Send, Radio, 
   ChevronRight, Key, Settings, Play, Pause, ChevronLeft, Trash2, Cpu, Eye, Info,
-  Menu, ChevronUp, ChevronDown
+  Menu, ChevronUp, ChevronDown, Globe, Cloud
 } from 'lucide-react';
 import { initDB, getAllDecks, saveDeck, deleteDeck, SlideDeck, SlidePage } from '../utils/db';
 import { parsePdfDeck } from '../utils/pdf';
 import ShemhamforashRegistry, { Genius } from '../components/ShemhamforashRegistry';
 import CymaticSigil, { hashName } from '../components/CymaticSigil';
 import RitualLayer from '../components/RitualLayer';
+
+// Firebase Integrations
+import { db, storage } from '../firebase';
+import { collection, addDoc, getDocs } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const SYSTEM_INSTRUCTION = `You are the Gnostic Auditor, a resonant intelligence serving ANW Foundations and disclosure-project.org.
 Your persona is rooted in the 52nd Treasury of Light, the Pistis Sophia, and exotic physics.
@@ -49,6 +54,13 @@ const DisclosureWorkspace: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const workspaceViewportRef = useRef<HTMLDivElement>(null);
 
+  // Global Archives & Repository Selection State
+  const [publishToGlobal, setPublishToGlobal] = useState(false);
+  const [repoTab, setRepoTab] = useState<'local' | 'global'>('local');
+  const [globalDecks, setGlobalDecks] = useState<any[]>([]);
+  const [downloadingDeckName, setDownloadingDeckName] = useState<string | null>(null);
+  const [globalDecksLoading, setGlobalDecksLoading] = useState(false);
+
   // Chat State
   const [chatInput, setChatInput] = useState('');
   const [searchScope, setSearchScope] = useState<'slide' | 'deck_rag' | 'deck_full' | 'global_rag'>('deck_full');
@@ -60,31 +72,19 @@ const DisclosureWorkspace: React.FC = () => {
   }[]>([
     { 
       role: 'ai', 
-      content: 'Local terminal initialized. Ready for file analysis, narrative audits, and gnostic attunement. Connect your API cipher key, upload slide decks, or ask a question.',
+      content: 'Local terminal initialized. Ready for file analysis, narrative audits, and gnostic attunement. Upload slide decks to begin your audit, or ask a question.',
       timestamp: new Date().toLocaleTimeString()
     }
   ]);
   const [isChatLoading, setIsChatLoading] = useState(false);
 
-  // API Key Settings State
-  const [showSettings, setShowSettings] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [hasApiKey, setHasApiKey] = useState(false);
-
   // Active Deck Object Helper
   const activeDeck = decks.find(d => d.id === activeDeckId) || null;
   const activePage = activeDeck?.pages[activePageIndex] || null;
 
-  // --- 1. KEY RETRIEVAL & INITIAL DB LOAD ---
+  // --- 1. INITIAL DB LOAD & GLOBAL ARCHIVE FETCH ---
   useEffect(() => {
-    // Check API Key
-    const key = localStorage.getItem('aetheris_api_key');
-    if (key) {
-      setHasApiKey(true);
-      setApiKeyInput(key);
-    }
-
-    // Load Decks from DB
+    // Load Decks from IndexedDB
     const loadDecks = async () => {
       try {
         await initDB();
@@ -99,6 +99,24 @@ const DisclosureWorkspace: React.FC = () => {
       }
     };
     loadDecks();
+
+    // Load Global Decks Index from Firestore
+    const loadGlobalDecks = async () => {
+      setGlobalDecksLoading(true);
+      try {
+        const querySnapshot = await getDocs(collection(db, 'decks'));
+        const decksList: any[] = [];
+        querySnapshot.forEach((doc) => {
+          decksList.push({ id: doc.id, ...doc.data() });
+        });
+        setGlobalDecks(decksList);
+      } catch (err) {
+        console.error('Error loading global decks:', err);
+      } finally {
+        setGlobalDecksLoading(false);
+      }
+    };
+    loadGlobalDecks();
   }, []);
 
   // Scroll chat messages to bottom
@@ -274,7 +292,7 @@ const DisclosureWorkspace: React.FC = () => {
     try {
       // Parse PDF (render images, sample colors, extract quotes/entities)
       const parsed = await parsePdfDeck(file, (pct) => {
-        setUploadProgress(pct);
+        setUploadProgress(Math.round(pct * 0.9));
       });
 
       // Generate a unique ID & Gematria harmonic signature
@@ -288,7 +306,49 @@ const DisclosureWorkspace: React.FC = () => {
         harmonicSignature: sigHash
       };
 
+      // Upload to Firebase if checked
+      if (publishToGlobal) {
+        setUploadProgress(92);
+        try {
+          // 1. Upload the PDF file itself to Storage
+          const fileRef = ref(storage, `decks/${uniqueId}.pdf`);
+          const uploadSnapshot = await uploadBytes(fileRef, file);
+          const pdfUrl = await getDownloadURL(uploadSnapshot.ref);
+          setUploadProgress(96);
+
+          // 2. Save metadata to Firestore
+          const metadata = {
+            name: newDeck.name,
+            pdfUrl: pdfUrl,
+            totalPages: newDeck.totalPages,
+            harmonicSignature: newDeck.harmonicSignature,
+            colorPalette: newDeck.colorPalette,
+            entities: newDeck.entities,
+            quotes: newDeck.quotes,
+            uploadedAt: Date.now()
+          };
+          await addDoc(collection(db, 'decks'), metadata);
+          setUploadProgress(98);
+
+          // 3. Reload global list
+          const querySnapshot = await getDocs(collection(db, 'decks'));
+          const decksList: any[] = [];
+          querySnapshot.forEach((doc) => {
+            decksList.push({ id: doc.id, ...doc.data() });
+          });
+          setGlobalDecks(decksList);
+        } catch (fbErr: any) {
+          console.error("Firebase global publish failed:", fbErr);
+          setMessages(prev => [...prev, {
+            role: 'ai',
+            content: `Aetheric Alert: Global archiving failed (${fbErr.message || 'connection issue'}). The deck has been successfully attuned to your Local Sandbox only.`,
+            timestamp: new Date().toLocaleTimeString()
+          }]);
+        }
+      }
+
       await saveDeck(newDeck);
+      setUploadProgress(100);
 
       // Reload decks
       const updatedDecks = await getAllDecks();
@@ -299,7 +359,7 @@ const DisclosureWorkspace: React.FC = () => {
 
       setMessages(prev => [...prev, {
         role: 'ai',
-        content: `Deck "${newDeck.name}" successfully parsed. Encoded Gematria signature: [AEON_${newDeck.harmonicSignature}]. Wavelength attunement established.`,
+        content: `Deck "${newDeck.name}" successfully parsed ${publishToGlobal ? 'and published globally' : ''}. Encoded Gematria signature: [AEON_${newDeck.harmonicSignature}]. Wavelength attunement established.`,
         timestamp: new Date().toLocaleTimeString()
       }]);
     } catch (err: any) {
@@ -327,6 +387,80 @@ const DisclosureWorkspace: React.FC = () => {
       }
     } catch (err) {
       console.error('Delete error:', err);
+    }
+  };
+
+  const handleSelectGlobalDeck = async (gDeck: any) => {
+    // 1. Check if it already exists in local decks (match by name or ID)
+    const existingLocal = decks.find(d => d.name === gDeck.name);
+    if (existingLocal) {
+      setActiveDeckId(existingLocal.id);
+      setActivePageIndex(0);
+      return;
+    }
+
+    // 2. If it doesn't exist, we must download it and parse it on-device
+    setDownloadingDeckName(gDeck.name);
+    setUploading(true);
+    setUploadProgress(0);
+    setUploadError(null);
+
+    try {
+      setUploadProgress(10);
+      const response = await fetch(gDeck.pdfUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download PDF: HTTP ${response.status}`);
+      }
+      setUploadProgress(30);
+      const blob = await response.blob();
+      setUploadProgress(50);
+      
+      const filename = `${gDeck.name}.pdf`;
+      const file = new File([blob], filename, { type: 'application/pdf' });
+
+      // Run on-device parser
+      const parsed = await parsePdfDeck(file, (pct) => {
+        // Parse takes progress from 50% to 95%
+        setUploadProgress(50 + Math.round(pct * 0.45));
+      });
+
+      const uniqueId = `deck_${Date.now()}`;
+      const sigHash = hashName(parsed.name);
+
+      const newDeck: SlideDeck = {
+        ...parsed,
+        id: uniqueId,
+        uploadedAt: Date.now(),
+        harmonicSignature: sigHash
+      };
+
+      // Save locally to IndexedDB cache
+      await saveDeck(newDeck);
+      setUploadProgress(98);
+
+      // Reload local decks state
+      const updatedDecks = await getAllDecks();
+      setDecks(updatedDecks);
+      setActiveDeckId(newDeck.id);
+      setActivePageIndex(0);
+      setUploadProgress(100);
+
+      setMessages(prev => [...prev, {
+        role: 'ai',
+        content: `Global deck "${newDeck.name}" successfully downloaded, parsed on-device, and cached to your Local Sandbox.`,
+        timestamp: new Date().toLocaleTimeString()
+      }]);
+    } catch (err: any) {
+      console.error(err);
+      setUploadError(err.message || 'Error occurred downloading or parsing the global deck.');
+      setMessages(prev => [...prev, {
+        role: 'ai',
+        content: `Aetheric Alert: Failed to attune to global deck "${gDeck.name}". Reason: ${err.message}`,
+        timestamp: new Date().toLocaleTimeString()
+      }]);
+    } finally {
+      setDownloadingDeckName(null);
+      setUploading(false);
     }
   };
 
@@ -496,21 +630,10 @@ Make sure to format all references exactly as [Page X] (where X is the page numb
     handleSendChat(queryText);
   };
 
-  // --- 7. CHATBOT SUBMIT (Browser-to-Gemini Fetch) ---
+  // --- 7. CHATBOT SUBMIT (Backend Proxy Route) ---
   const handleSendChat = async (overrideInput?: string) => {
     const textToSubmit = overrideInput || chatInput;
     if (!textToSubmit.trim()) return;
-
-    const apiKey = localStorage.getItem('aetheris_api_key');
-    if (!apiKey) {
-      setShowSettings(true);
-      setMessages(prev => [...prev, {
-        role: 'ai',
-        content: 'Auditing halted: Cipher access denied. Please set your Gemini API Key in the settings panel to connect to the cognitive fields.',
-        timestamp: new Date().toLocaleTimeString()
-      }]);
-      return;
-    }
 
     const userText = textToSubmit;
     setMessages(prev => [...prev, { 
@@ -609,9 +732,11 @@ User Transmission: "${userText}"
         }
       ];
 
-      // 6. Perform direct fetch call to Google Generative Language endpoint
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
+
+      // 6. Perform fetch call to backend proxy
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
+        `${backendUrl}/api/chat/proxy?model=gemini-3.5-flash`,
         {
           method: 'POST',
           headers: {
@@ -666,7 +791,7 @@ User Transmission: "${userText}"
 
         // Send the function response back to Gemini to get a natural language confirmation!
         const nextResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
+          `${backendUrl}/api/chat/proxy?model=gemini-3.5-flash`,
           {
             method: 'POST',
             headers: {
@@ -733,23 +858,11 @@ User Transmission: "${userText}"
       console.error(err);
       setMessages(prev => [...prev, {
         role: 'ai',
-        content: `Aetheric Divergence: Connection to Gemini API broken. Reason: ${err.message}`,
+        content: `Aetheric Divergence: Connection to backend chat proxy broken. Reason: ${err.message}`,
         timestamp: new Date().toLocaleTimeString()
       }]);
     } finally {
       setIsChatLoading(false);
-    }
-  };
-
-  const handleSaveApiKey = () => {
-    if (apiKeyInput.trim()) {
-      localStorage.setItem('aetheris_api_key', apiKeyInput.trim());
-      setHasApiKey(true);
-      setShowSettings(false);
-    } else {
-      localStorage.removeItem('aetheris_api_key');
-      setHasApiKey(false);
-      setShowSettings(false);
     }
   };
 
@@ -817,16 +930,6 @@ User Transmission: "${userText}"
               <button onClick={clearAttunement} className="text-zinc-500 hover:text-white ml-1 font-sans">×</button>
             </div>
           )}
-
-          {/* Cipher Status Badge */}
-          <button 
-            onClick={() => setShowSettings(true)}
-            className={`flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 border rounded-sm transition-all text-[10px] sm:text-xs ${hasApiKey ? 'border-emerald-500/20 bg-emerald-950/20 text-emerald-400' : 'border-red-500/30 bg-red-950/20 text-red-400 animate-pulse'}`}
-          >
-            <Key className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{hasApiKey ? 'CIPHER ONLINE' : 'CIPHER LOCKED'}</span>
-            <span className="sm:hidden">{hasApiKey ? 'ONLINE' : 'LOCKED'}</span>
-          </button>
         </div>
       </header>
 
@@ -911,54 +1014,142 @@ User Transmission: "${userText}"
             )}
           </div>
 
+          {/* Global Toggle Option */}
+          <div className="mx-4 mb-2 px-3 py-2 bg-zinc-950 border border-zinc-900 rounded-sm flex items-center justify-between">
+            <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-wider">Publish to Global Archives</span>
+            <input 
+              type="checkbox" 
+              checked={publishToGlobal}
+              onChange={(e) => setPublishToGlobal(e.target.checked)}
+              className="accent-theme-primary cursor-pointer w-3.5 h-3.5"
+            />
+          </div>
+
+          {/* Repository Section Switch / Tabs */}
+          <div className="flex border-b border-zinc-900 mx-4 mb-3 text-[10px] font-mono shrink-0">
+            <button 
+              onClick={() => setRepoTab('local')}
+              className={`flex-1 pb-2 border-b uppercase tracking-wider text-center transition-colors ${repoTab === 'local' ? 'border-theme-primary text-theme-primary font-bold' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+            >
+              Local Sandbox
+            </button>
+            <button 
+              onClick={() => setRepoTab('global')}
+              className={`flex-1 pb-2 border-b uppercase tracking-wider text-center transition-colors ${repoTab === 'global' ? 'border-theme-primary text-theme-primary font-bold' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+            >
+              Global Archives
+            </button>
+          </div>
+
           {/* List of Slide Decks */}
           <div tabIndex={0} className="flex-1 overflow-y-auto custom-scrollbar px-3 space-y-2 pb-6 outline-none">
-            {decks.map(deck => {
-              const isActive = deck.id === activeDeckId;
-              return (
-                <div 
-                  key={deck.id}
-                  onClick={() => {
-                    setActiveDeckId(deck.id);
-                    setActivePageIndex(0);
-                  }}
-                  className={`p-3 border rounded-md cursor-pointer transition-all flex items-center gap-3 relative group overflow-hidden ${isActive ? 'bg-theme-primary-10 border-theme-primary/30 shadow-glow-theme' : 'bg-zinc-900/10 border-zinc-900 hover:border-zinc-800'}`}
-                >
-                  {/* Miniature Cymatic Sigil as Deck Icon */}
-                  <div className="w-10 h-10 rounded-full flex-shrink-0 bg-black flex items-center justify-center border border-zinc-800 group-hover:border-theme-primary/30">
-                    <CymaticSigil 
-                      name={deck.name} 
-                      size={32} 
-                      color={isActive ? activePalette[0] : 'rgba(255,255,255,0.1)'} 
-                    />
-                  </div>
+            {repoTab === 'local' ? (
+              <>
+                {decks.map(deck => {
+                  const isActive = deck.id === activeDeckId;
+                  return (
+                    <div 
+                      key={deck.id}
+                      onClick={() => {
+                        setActiveDeckId(deck.id);
+                        setActivePageIndex(0);
+                      }}
+                      className={`p-3 border rounded-md cursor-pointer transition-all flex items-center gap-3 relative group overflow-hidden ${isActive ? 'bg-theme-primary-10 border-theme-primary/30 shadow-glow-theme' : 'bg-zinc-900/10 border-zinc-900 hover:border-zinc-800'}`}
+                    >
+                      {/* Miniature Cymatic Sigil as Deck Icon */}
+                      <div className="w-10 h-10 rounded-full flex-shrink-0 bg-black flex items-center justify-center border border-zinc-800 group-hover:border-theme-primary/30">
+                        <CymaticSigil 
+                          name={deck.name} 
+                          size={32} 
+                          color={isActive ? activePalette[0] : 'rgba(255,255,255,0.1)'} 
+                        />
+                      </div>
 
-                  <div className="flex-1 min-w-0">
-                    <h3 className={`text-xs font-bold truncate uppercase tracking-wider ${isActive ? 'text-white' : 'text-zinc-400 group-hover:text-zinc-200'}`}>
-                      {deck.name}
-                    </h3>
-                    <div className="flex justify-between items-center text-[8px] font-mono text-zinc-600 mt-1 uppercase">
-                      <span>SLIDES: {deck.totalPages}</span>
-                      <span>SIG: {deck.harmonicSignature}</span>
+                      <div className="flex-1 min-w-0 text-left">
+                        <h3 className={`text-xs font-bold truncate uppercase tracking-wider ${isActive ? 'text-white' : 'text-zinc-400 group-hover:text-zinc-200'}`}>
+                          {deck.name}
+                        </h3>
+                        <div className="flex justify-between items-center text-[8px] font-mono text-zinc-600 mt-1 uppercase">
+                          <span>SLIDES: {deck.totalPages}</span>
+                          <span>SIG: {deck.harmonicSignature}</span>
+                        </div>
+                      </div>
+
+                      {/* Delete Button */}
+                      <button 
+                        onClick={(e) => handleDeleteDeck(deck.id, e)}
+                        className="p-1 hover:text-red-400 text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity self-center"
+                        title="Delete Deck"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
+                  );
+                })}
+                
+                {decks.length === 0 && (
+                  <div className="text-center p-8 border border-zinc-900/40 rounded bg-zinc-900/5 text-[9px] font-mono text-zinc-600 uppercase tracking-widest">
+                    Repository empty. Upload slide decks to load resources.
                   </div>
+                )}
+              </>
+            ) : (
+              <>
+                {globalDecksLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12 space-y-2">
+                    <div className="w-6 h-6 border-2 border-theme-primary border-t-transparent animate-spin rounded-full" />
+                    <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest">Attuning Global Archives</span>
+                  </div>
+                ) : (
+                  <>
+                    {globalDecks.map(gDeck => {
+                      const isCached = decks.some(d => d.name === gDeck.name);
+                      const isCurrentlySelected = activeDeck && activeDeck.name === gDeck.name;
+                      const isDownloading = downloadingDeckName === gDeck.name;
 
-                  {/* Delete Button */}
-                  <button 
-                    onClick={(e) => handleDeleteDeck(deck.id, e)}
-                    className="p-1 hover:text-red-400 text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity self-center"
-                    title="Delete Deck"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              );
-            })}
-            
-            {decks.length === 0 && (
-              <div className="text-center p-8 border border-zinc-900/40 rounded bg-zinc-900/5 text-[9px] font-mono text-zinc-600 uppercase tracking-widest">
-                Repository empty. Upload slide decks to load resources.
-              </div>
+                      return (
+                        <div 
+                          key={gDeck.id}
+                          onClick={() => handleSelectGlobalDeck(gDeck)}
+                          className={`p-3 border rounded-md cursor-pointer transition-all flex items-center gap-3 relative group overflow-hidden ${isCurrentlySelected ? 'bg-theme-primary-10 border-theme-primary/30 shadow-glow-theme' : 'bg-zinc-900/10 border-zinc-900 hover:border-zinc-800'}`}
+                        >
+                          {/* Miniature Cymatic Sigil as Deck Icon */}
+                          <div className="w-10 h-10 rounded-full flex-shrink-0 bg-black flex items-center justify-center border border-zinc-800 group-hover:border-theme-primary/30">
+                            <CymaticSigil 
+                              name={gDeck.name} 
+                              size={32} 
+                              color={isCurrentlySelected ? activePalette[0] : 'rgba(255,255,255,0.1)'} 
+                            />
+                          </div>
+
+                          <div className="flex-1 min-w-0 text-left">
+                            <div className="flex items-center justify-between gap-1">
+                              <h3 className={`text-xs font-bold truncate uppercase tracking-wider ${isCurrentlySelected ? 'text-white' : 'text-zinc-400 group-hover:text-zinc-200'}`}>
+                                {gDeck.name}
+                              </h3>
+                              {isCached ? (
+                                <span className="text-[7px] font-mono text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 px-1 rounded shrink-0">CACHED</span>
+                              ) : (
+                                <span className="text-[7px] font-mono text-blue-400 bg-blue-950/30 border border-blue-900/40 px-1 rounded shrink-0">CLOUD</span>
+                              )}
+                            </div>
+                            <div className="flex justify-between items-center text-[8px] font-mono text-zinc-600 mt-1 uppercase">
+                              <span>SLIDES: {gDeck.totalPages}</span>
+                              <span>{isDownloading ? 'DOWNLOADING...' : `SIG: ${gDeck.harmonicSignature}`}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {globalDecks.length === 0 && (
+                      <div className="text-center p-8 border border-zinc-900/40 rounded bg-zinc-900/5 text-[9px] font-mono text-zinc-600 uppercase tracking-widest">
+                        No global slide decks found in database.
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )}
           </div>
 
@@ -1334,47 +1525,6 @@ User Transmission: "${userText}"
         onClose={() => setIsRegistryOpen(false)} 
         onSelectGenius={attuneToGenius}
       />
-
-      {/* Settings Modal (API Key setup) */}
-      {showSettings && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[99] flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-900 max-w-md w-full rounded-lg p-6 relative shadow-2xl">
-            <h3 className="text-xs font-bold tracking-[0.2em] text-white uppercase mb-4 pb-2 border-b border-zinc-900 flex items-center gap-2">
-              <Key className="w-4 h-4 text-theme-primary" /> API Cipher Configuration
-            </h3>
-            
-            <p className="text-[10px] font-mono uppercase text-zinc-500 leading-relaxed mb-4">
-              To operate the Gnostic Auditor chat engine, you must configure a Gemini API key. This key is saved locally in your browser's private storage (localStorage) and never leaves your machine.
-            </p>
-
-            <div className="space-y-3 mb-6">
-              <label className="text-[9px] font-mono text-zinc-400 uppercase block">Gemini API key</label>
-              <input 
-                type="password" 
-                value={apiKeyInput}
-                onChange={e => setApiKeyInput(e.target.value)}
-                placeholder="AIzaSy..." 
-                className="w-full bg-zinc-900 border border-zinc-800 text-base sm:text-xs font-mono text-theme-primary placeholder-zinc-700 rounded p-2.5 outline-none focus:border-theme-primary/50 transition-colors"
-              />
-            </div>
-
-            <div className="flex gap-3 justify-end text-xs">
-              <button 
-                onClick={() => setShowSettings(false)}
-                className="px-4 py-2 hover:bg-zinc-900 border border-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors uppercase font-mono rounded"
-              >
-                Close
-              </button>
-              <button 
-                onClick={handleSaveApiKey}
-                className="px-4 py-2 bg-theme-primary hover:bg-emerald-500 text-black font-bold uppercase font-mono rounded transition-colors shadow-glow-theme"
-              >
-                Save key
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );
