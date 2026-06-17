@@ -5,7 +5,7 @@ const STORE_NAME = 'slideDecks';
 export interface SlidePage {
   pageNumber: number;
   text: string;
-  image: string; // base64 Data URL
+  image?: string; // base64 Data URL (optional for lazy-rendering)
 }
 
 export interface SlideDeck {
@@ -18,6 +18,7 @@ export interface SlideDeck {
   entities: string[];        // auto-extracted proper nouns/tags
   quotes: string[];          // key sentences for tickers
   pages: SlidePage[];
+  pdfBytes?: ArrayBuffer;    // raw PDF file bytes for lazy rendering
 }
 
 export const initDB = (): Promise<IDBDatabase> => {

@@ -5,7 +5,7 @@ import {
   Menu, ChevronUp, ChevronDown, Globe, Cloud
 } from 'lucide-react';
 import { initDB, getAllDecks, saveDeck, deleteDeck, SlideDeck, SlidePage } from '../utils/db';
-import { parsePdfDeck } from '../utils/pdf';
+import { parsePdfDeck, loadPdfJs } from '../utils/pdf';
 import ShemhamforashRegistry, { Genius } from '../components/ShemhamforashRegistry';
 import CymaticSigil, { hashName } from '../components/CymaticSigil';
 import RitualLayer from '../components/RitualLayer';
@@ -27,6 +27,11 @@ const DisclosureWorkspace: React.FC = () => {
   const [decks, setDecks] = useState<SlideDeck[]>([]);
   const [activeDeckId, setActiveDeckId] = useState<string | null>(null);
   const [activePageIndex, setActivePageIndex] = useState<number>(0);
+
+  // Lazy Rendering States
+  const [renderedPageImage, setRenderedPageImage] = useState<string | null>(null);
+  const [pdfDocumentProxy, setPdfDocumentProxy] = useState<any>(null);
+  const [isRenderingSlide, setIsRenderingSlide] = useState<boolean>(false);
   
   // Theme & Attunement State
   const [activePalette, setActivePalette] = useState<string[]>(['#10b981', '#8b5cf6', '#f59e0b']);
@@ -82,6 +87,101 @@ const DisclosureWorkspace: React.FC = () => {
   // Active Deck Object Helper
   const activeDeck = decks.find(d => d.id === activeDeckId) || null;
   const activePage = activeDeck?.pages[activePageIndex] || null;
+
+  // --- LAZY PDF RENDERING EFFECTS ---
+  // 1. Initialize PDF document proxy on active deck change
+  useEffect(() => {
+    let active = true;
+    setPdfDocumentProxy(null);
+    setRenderedPageImage(null);
+
+    if (!activeDeck) return;
+
+    // Backward compatibility: check if active page already has legacy base64 image data
+    const firstPage = activeDeck.pages[activePageIndex];
+    if (firstPage && firstPage.image) {
+      setRenderedPageImage(firstPage.image);
+    }
+
+    const pdfBytes = activeDeck.pdfBytes;
+    if (!pdfBytes) return;
+
+    const loadPdfDoc = async () => {
+      try {
+        const pdfjs = await loadPdfJs();
+        // Slice the buffer to avoid side-effects
+        const loadingTask = pdfjs.getDocument({ data: pdfBytes.slice(0) });
+        const pdfDoc = await loadingTask.promise;
+        if (active) {
+          setPdfDocumentProxy(pdfDoc);
+        }
+      } catch (err) {
+        console.error("Error loading PDF document proxy for lazy rendering:", err);
+      }
+    };
+
+    loadPdfDoc();
+
+    return () => {
+      active = false;
+    };
+  }, [activeDeckId]);
+
+  // 2. Render current page on demand
+  useEffect(() => {
+    let active = true;
+
+    if (!activeDeck) return;
+
+    const currPage = activeDeck.pages[activePageIndex];
+    if (currPage && currPage.image) {
+      setRenderedPageImage(currPage.image);
+      return;
+    }
+
+    // Reset renderedPageImage to null immediately when activePageIndex changes
+    // so we don't show the previous page while the new page is rendering
+    setRenderedPageImage(null);
+
+    if (!pdfDocumentProxy) {
+      return;
+    }
+
+    const renderPage = async () => {
+      setIsRenderingSlide(true);
+      try {
+        const pageNum = activePageIndex + 1;
+        if (pageNum < 1 || pageNum > pdfDocumentProxy.numPages) return;
+
+        const page = await pdfDocumentProxy.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          const jpegUrl = canvas.toDataURL('image/jpeg', 0.85);
+          if (active) {
+            setRenderedPageImage(jpegUrl);
+          }
+        }
+      } catch (err) {
+        console.error("Error rendering page dynamically:", err);
+      } finally {
+        if (active) {
+          setIsRenderingSlide(false);
+        }
+      }
+    };
+
+    renderPage();
+
+    return () => {
+      active = false;
+    };
+  }, [activePageIndex, pdfDocumentProxy, activeDeck]);
 
   // --- 1. INITIAL DB LOAD & GLOBAL ARCHIVE FETCH ---
   useEffect(() => {
@@ -299,68 +399,89 @@ const DisclosureWorkspace: React.FC = () => {
       // Generate a unique ID & Gematria harmonic signature
       const uniqueId = `deck_${Date.now()}`;
       const sigHash = hashName(parsed.name);
+      const arrayBuffer = await file.arrayBuffer();
 
       const newDeck: SlideDeck = {
         ...parsed,
         id: uniqueId,
         uploadedAt: Date.now(),
-        harmonicSignature: sigHash
+        harmonicSignature: sigHash,
+        pdfBytes: arrayBuffer
       };
+
+      // Save locally first so the user has immediate access to the slide deck
+      await saveDeck(newDeck);
+
+      // Reload decks state immediately
+      const updatedDecks = await getAllDecks();
+      setDecks(updatedDecks);
+      setActiveDeckId(newDeck.id);
+      setActivePageIndex(0);
 
       // Upload to Firebase if checked
       if (publishToGlobal) {
         setUploadProgress(92);
         try {
-          // 1. Upload the PDF file itself to Storage
-          const fileRef = ref(storage, `decks/${uniqueId}.pdf`);
-          const uploadSnapshot = await uploadBytes(fileRef, file);
-          const pdfUrl = await getDownloadURL(uploadSnapshot.ref);
-          setUploadProgress(96);
+          // Wrap the upload operations in a promise that can be raced with a timeout
+          const uploadPromise = (async () => {
+            // 1. Upload the PDF file itself to Storage
+            const fileRef = ref(storage, `decks/${uniqueId}.pdf`);
+            const uploadSnapshot = await uploadBytes(fileRef, file);
+            const pdfUrl = await getDownloadURL(uploadSnapshot.ref);
+            
+            // 2. Save metadata to Firestore
+            const metadata = {
+              name: newDeck.name,
+              pdfUrl: pdfUrl,
+              totalPages: newDeck.totalPages,
+              harmonicSignature: newDeck.harmonicSignature,
+              colorPalette: newDeck.colorPalette,
+              entities: newDeck.entities,
+              quotes: newDeck.quotes,
+              uploadedAt: Date.now()
+            };
+            await addDoc(collection(db, 'decks'), metadata);
 
-          // 2. Save metadata to Firestore
-          const metadata = {
-            name: newDeck.name,
-            pdfUrl: pdfUrl,
-            totalPages: newDeck.totalPages,
-            harmonicSignature: newDeck.harmonicSignature,
-            colorPalette: newDeck.colorPalette,
-            entities: newDeck.entities,
-            quotes: newDeck.quotes,
-            uploadedAt: Date.now()
-          };
-          await addDoc(collection(db, 'decks'), metadata);
-          setUploadProgress(98);
+            // 3. Reload global list
+            const querySnapshot = await getDocs(collection(db, 'decks'));
+            const decksList: any[] = [];
+            querySnapshot.forEach((doc) => {
+              decksList.push({ id: doc.id, ...doc.data() });
+            });
+            setGlobalDecks(decksList);
+          })();
 
-          // 3. Reload global list
-          const querySnapshot = await getDocs(collection(db, 'decks'));
-          const decksList: any[] = [];
-          querySnapshot.forEach((doc) => {
-            decksList.push({ id: doc.id, ...doc.data() });
-          });
-          setGlobalDecks(decksList);
+          // 12-second timeout to prevent indefinite hanging on network/CORS/rule issues
+          const timeoutPromise = new Promise<void>((_, reject) => 
+            setTimeout(() => reject(new Error("Global upload timed out. Ensure Firebase Storage is initialized in your console and Security Rules allow write access.")), 12000)
+          );
+
+          await Promise.race([uploadPromise, timeoutPromise]);
+          setUploadProgress(100);
+          setUploading(false);
+
+          setMessages(prev => [...prev, {
+            role: 'ai',
+            content: `Deck "${newDeck.name}" successfully parsed and published globally. Encoded Gematria signature: [AEON_${newDeck.harmonicSignature}]. Wavelength attunement established.`,
+            timestamp: new Date().toLocaleTimeString()
+          }]);
+          return;
         } catch (fbErr: any) {
           console.error("Firebase global publish failed:", fbErr);
           setMessages(prev => [...prev, {
             role: 'ai',
-            content: `Aetheric Alert: Global archiving failed (${fbErr.message || 'connection issue'}). The deck has been successfully attuned to your Local Sandbox only.`,
+            content: `Aetheric Alert: Global archiving failed (${fbErr.message || 'connection/rules issue'}). The deck has been successfully attuned to your Local Sandbox.`,
             timestamp: new Date().toLocaleTimeString()
           }]);
         }
       }
 
-      await saveDeck(newDeck);
       setUploadProgress(100);
-
-      // Reload decks
-      const updatedDecks = await getAllDecks();
-      setDecks(updatedDecks);
-      setActiveDeckId(newDeck.id);
-      setActivePageIndex(0);
       setUploading(false);
 
       setMessages(prev => [...prev, {
         role: 'ai',
-        content: `Deck "${newDeck.name}" successfully parsed ${publishToGlobal ? 'and published globally' : ''}. Encoded Gematria signature: [AEON_${newDeck.harmonicSignature}]. Wavelength attunement established.`,
+        content: `Deck "${newDeck.name}" successfully parsed and saved to Local Sandbox. Encoded Gematria signature: [AEON_${newDeck.harmonicSignature}].`,
         timestamp: new Date().toLocaleTimeString()
       }]);
     } catch (err: any) {
@@ -427,12 +548,14 @@ const DisclosureWorkspace: React.FC = () => {
 
       const uniqueId = `deck_${Date.now()}`;
       const sigHash = hashName(parsed.name);
+      const arrayBuffer = await file.arrayBuffer();
 
       const newDeck: SlideDeck = {
         ...parsed,
         id: uniqueId,
         uploadedAt: Date.now(),
-        harmonicSignature: sigHash
+        harmonicSignature: sigHash,
+        pdfBytes: arrayBuffer
       };
 
       // Save locally to IndexedDB cache
@@ -669,8 +792,9 @@ User Transmission: "${userText}"
       const parts: any[] = [{ text: promptPayload }];
 
       // 4. Attach active slide image for Gemini multimodal analysis
-      if (activePage && activePage.image) {
-        const base64Data = activePage.image.split(',')[1];
+      const currentSlideImage = renderedPageImage || activePage?.image;
+      if (currentSlideImage) {
+        const base64Data = currentSlideImage.split(',')[1];
         if (base64Data) {
           parts.push({
             inlineData: {
@@ -733,7 +857,10 @@ User Transmission: "${userText}"
         }
       ];
 
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+          ? '' 
+          : 'https://trinocular-unenviously-thea.ngrok-free.dev');
 
       // 6. Perform fetch call to backend proxy
       const response = await fetch(
@@ -759,8 +886,18 @@ User Transmission: "${userText}"
       );
 
       if (!response.ok) {
-        const errJson = await response.json();
-        throw new Error(errJson.error?.message || `HTTP error ${response.status}`);
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errJson = await response.json().catch(() => ({}));
+          throw new Error(errJson.error?.message || `HTTP error ${response.status}`);
+        } else {
+          throw new Error(`Server returned HTML/plain error (${response.status}). The backend server might be offline or misconfigured.`);
+        }
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error(`Invalid response format from server (expected JSON, received ${contentType || 'text'}). The backend server might be offline or misconfigured.`);
       }
 
       let resData = await response.json();
@@ -826,8 +963,18 @@ User Transmission: "${userText}"
         );
 
         if (!nextResponse.ok) {
-          const errJson = await nextResponse.json();
-          throw new Error(errJson.error?.message || `HTTP error ${nextResponse.status}`);
+          const nextContentType = nextResponse.headers.get('content-type');
+          if (nextContentType && nextContentType.includes('application/json')) {
+            const errJson = await nextResponse.json().catch(() => ({}));
+            throw new Error(errJson.error?.message || `HTTP error ${nextResponse.status}`);
+          } else {
+            throw new Error(`Server returned HTML error (${nextResponse.status}) during function callback.`);
+          }
+        }
+
+        const nextContentType = nextResponse.headers.get('content-type');
+        if (!nextContentType || !nextContentType.includes('application/json')) {
+          throw new Error(`Invalid response format from server during function callback.`);
         }
 
         resData = await nextResponse.json();
@@ -892,11 +1039,11 @@ User Transmission: "${userText}"
       />
 
       {/* Background Holographic Blueprint Layer */}
-      {activePage && (
+      {(renderedPageImage || activePage?.image) && (
         <div 
           className="absolute inset-0 pointer-events-none z-0 transition-all duration-1000 bg-center bg-no-repeat bg-contain"
           style={{ 
-            backgroundImage: `url(${activePage.image})`, 
+            backgroundImage: `url(${renderedPageImage || activePage?.image})`, 
             opacity: hologramOpacity,
             mixBlendMode: 'screen',
             filter: 'brightness(0.65) contrast(1.15) grayscale(0.2)'
@@ -1266,11 +1413,18 @@ User Transmission: "${userText}"
                       
                       {activePage ? (
                         <>
-                          <img 
-                            src={activePage.image} 
-                            alt={`Slide ${activePage.pageNumber}`} 
-                            className="max-h-full max-w-full object-contain"
-                          />
+                          {renderedPageImage || activePage.image ? (
+                            <img 
+                              src={renderedPageImage || activePage.image} 
+                              alt={`Slide ${activePage.pageNumber}`} 
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center gap-3 text-zinc-500 font-mono text-[10px] uppercase">
+                              <Cpu className="w-6 h-6 animate-spin text-theme-primary" />
+                              <span>Attuning visual frequencies...</span>
+                            </div>
+                          )}
                           
                           {/* Floating slide info indicator */}
                           <div className="absolute bottom-4 left-4 bg-black/90 border border-zinc-800 px-3 py-1.5 rounded text-[10px] font-mono flex items-center gap-3">

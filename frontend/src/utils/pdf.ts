@@ -167,26 +167,26 @@ export const parsePdfDeck = async (
     const pageText = textContent.items.map((item: any) => item.str).join(' ');
     combinedText += ' ' + pageText;
     
-    // 2. Page Rendering
-    const viewport = page.getViewport({ scale: 1.0 }); // 1.0 scale to balance storage size and readability
-    const canvas = document.createElement('canvas');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      // 3. Color Sampling
-      const pagePalette = sampleDominantColors(canvas);
-      allPalettes.push(pagePalette);
+    // 2. Page Rendering & Color Sampling (Only on page 1 to extract the deck's theme palette)
+    if (i === 1) {
+      const viewport = page.getViewport({ scale: 1.0 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
       
-      const imageBase64 = canvas.toDataURL('image/jpeg', 0.6); // 0.6 quality for IndexedDB footprint efficiency
-      pages.push({
-        pageNumber: i,
-        text: pageText,
-        image: imageBase64
-      });
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        // 3. Color Sampling
+        const pagePalette = sampleDominantColors(canvas);
+        allPalettes.push(pagePalette);
+      }
     }
+    
+    pages.push({
+      pageNumber: i,
+      text: pageText
+    });
     
     if (progressCallback) {
       progressCallback(Math.round((i / totalPages) * 100));
