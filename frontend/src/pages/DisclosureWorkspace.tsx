@@ -9,6 +9,7 @@ import { parsePdfDeck } from '../utils/pdf';
 import ShemhamforashRegistry, { Genius } from '../components/ShemhamforashRegistry';
 import CymaticSigil, { hashName } from '../components/CymaticSigil';
 import RitualLayer from '../components/RitualLayer';
+import { Login } from '../components/Login';
 
 // Firebase Integrations
 import { db, storage } from '../firebase';
@@ -930,6 +931,7 @@ User Transmission: "${userText}"
               <button onClick={clearAttunement} className="text-zinc-500 hover:text-white ml-1 font-sans">×</button>
             </div>
           )}
+          <Login />
         </div>
       </header>
 
