@@ -1,0 +1,9 @@
+version: 3
+agent:
+  authtoken: 3BHwQIMy3ARtts0PPHoBotANJGt_78A9FS8VmTcWz6g5dqG41
+endpoints:
+  - name: cli-quickstart
+    url: https://trinocular-unenviously-thea.ngrok-free.dev
+    upstream:
+      url: 5000
+    pooling_enabled: true

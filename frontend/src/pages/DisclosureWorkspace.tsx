@@ -868,7 +868,8 @@ User Transmission: "${userText}"
         {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
           },
           body: JSON.stringify({
             contents: [
@@ -933,7 +934,8 @@ User Transmission: "${userText}"
           {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true'
             },
             body: JSON.stringify({
               contents: [

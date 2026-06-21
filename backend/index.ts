@@ -39,7 +39,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'OPTIONS'],
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Log all incoming HTTP requests automatically
 app.use(expressWinston.logger({
